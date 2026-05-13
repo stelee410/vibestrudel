@@ -1,0 +1,9 @@
+{
+  "name": "strudel-vendor-build",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@strudel/web": "1.3.0",
+    "@strudel/draw": "1.2.6"
+  }
+}

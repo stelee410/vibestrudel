@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>VIBE//STRUDEL — Live Coding Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./themes/default.css" />
+</head>
+<body>
+
+<div id="app">
+  <!-- ============== TOP BAR ============== -->
+  <header class="topbar">
+    <span class="screw tl"></span><span class="screw tr"></span>
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1>VIBE<span class="sep">//</span>STRUDEL</h1>
+        <div class="sub">Live Pattern Translator · v1.0</div>
+      </div>
+    </div>
+
+    <div class="leds">
+      <div class="led on" data-color="green" id="led-power"><span class="dot"></span><span class="label">PWR</span></div>
+      <div class="led" data-color="blue" id="led-ai"><span class="dot"></span><span class="label">AI</span></div>
+      <div class="led" data-color="amber" id="led-audio"><span class="dot"></span><span class="label">AUDIO</span></div>
+      <div class="led" data-color="red" id="led-err"><span class="dot"></span><span class="label">FAULT</span></div>
+    </div>
+
+    <div class="meta">
+      <div class="bpm-display"><span class="v" id="bpm-readout">120</span><span class="l">BPM</span></div>
+      <button class="key-btn" id="api-key-btn">API KEY</button>
+    </div>
+  </header>
+
+  <!-- ============== MAIN ============== -->
+  <main>
+    <!-- LEFT: live code -->
+    <section class="panel">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+      <div class="panel-head">
+        <div class="title">PATTERN · LIVE CODE</div>
+        <div class="right">
+          <button class="head-btn run" id="run-btn" title="执行当前代码 (Ctrl/Cmd + Enter)">▶ RUN</button>
+          <button class="head-btn auto-on" id="auto-btn" title="编辑后自动评估,下一个 cycle 生效">⟳ AUTO</button>
+          <button class="head-btn" id="copy-btn" title="复制全部代码到剪贴板">⧉ COPY</button>
+          <span class="badge dirty" id="dirty-badge" style="display:none">EDITED</span>
+          <span class="badge" id="cycle-badge">CYCLE 0</span>
+          <span class="badge live" id="live-badge">STANDBY</span>
+        </div>
+      </div>
+      <div class="code-area"><pre id="code-display" contenteditable="plaintext-only" spellcheck="false"><span class="tok-cmt">// 等待第一条指令,或点 PRESET BANK 中的预设</span>
+<span class="tok-cmt">// 这里也可以直接编辑 — 改完按 RUN 或 Ctrl/Cmd + Enter</span>
+<span class="tok-cmt">// 例如: "起一段 128 BPM 的完整 techno"</span></pre></div>
+    </section>
+
+    <!-- RIGHT: console -->
+    <section class="panel">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+      <div class="panel-head">
+        <div class="title">CONSOLE · VIBE I/O</div>
+        <div class="right">
+          <span class="badge" id="model-badge">GEMINI 2.5 FLASH</span>
+        </div>
+      </div>
+      <div class="console-area">
+        <div class="log" id="log"></div>
+        <div class="input-zone">
+          <div class="input-row">
+            <button class="hints-btn" id="hints-btn" title="Hints — 提示词模板">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 4 12.7c-.7.5-1 1.3-1 2.1V18H9v-1.2c0-.8-.3-1.6-1-2.1A7 7 0 0 1 12 2Z"/></svg>
+            </button>
+            <div class="prompt-prefix">vibe&gt;</div>
+            <textarea id="prompt" placeholder="用中文或英文描述你想要的氛围 · 回车发送 · Shift+Enter 换行"></textarea>
+            <button class="send" id="send-btn">SEND</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRESET BANK -->
+    <section class="panel preset-rack">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+      <div class="panel-head" id="preset-head">
+        <div class="title">PRESET BANK <span class="chevron">▾</span></div>
+        <div class="right">
+          <span class="badge">CLICK TO LOAD &amp; PLAY</span>
+        </div>
+      </div>
+      <div class="preset-tabs" id="preset-tabs">
+        <button class="preset-tab on" data-source="all">全部 <span class="count" id="count-all">·</span></button>
+        <button class="preset-tab" data-source="builtin">内置 <span class="count" id="count-builtin">·</span></button>
+        <button class="preset-tab" data-source="community">社区 <span class="count" id="count-community">·</span></button>
+      </div>
+      <div class="preset-grid" id="preset-grid"></div>
+    </section>
+  </main>
+
+  <!-- ============== TRANSPORT ============== -->
+  <footer class="transport">
+    <span class="screw tl"></span><span class="screw bl"></span>
+    <div class="group">
+      <button class="tbtn play" id="btn-play" title="播放当前模式" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="tbtn stop" id="btn-stop" title="HUSH 静音" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+      </button>
+      <span class="tlabel">TRANSPORT</span>
+    </div>
+
+    <div class="group" style="justify-content:center">
+      <span class="tlabel">LEVEL</span>
+      <div class="meter" id="meter" data-level="0"></div>
+    </div>
+
+    <div class="group">
+      <span class="tlabel">TEMPO</span>
+      <div class="bpm-knob">
+        <button class="nudge" id="bpm-down">−</button>
+        <input id="bpm-input" type="number" min="40" max="240" value="120" />
+        <button class="nudge" id="bpm-up">+</button>
+      </div>
+    </div>
+    <span class="screw tr"></span><span class="screw br"></span>
+  </footer>
+</div>
+
+<!-- ============== LLM SETTINGS MODAL ============== -->
+<div class="modal-bg" id="key-modal" style="display:none">
+  <div class="modal modal-lg">
+    <span class="screw tl"></span><span class="screw tr"></span>
+    <span class="screw bl"></span><span class="screw br"></span>
+    <h2>LLM <span class="a">SETTINGS</span></h2>
+    <p>所有配置仅保存在你浏览器的 localStorage 中,不会上传任何服务器。</p>
+
+    <div class="field">
+      <label>PROVIDER</label>
+      <div class="tabs" id="provider-tabs">
+        <button class="tab" data-prov="gemini">GEMINI</button>
+        <button class="tab" data-prov="openai">OPENAI 兼容</button>
+      </div>
+    </div>
+
+    <!-- Gemini panel -->
+    <div class="prov-panel" id="panel-gemini">
+      <div class="field">
+        <label>MODEL</label>
+        <input id="gemini-model" type="text" placeholder="gemini-2.5-flash" />
+      </div>
+      <div class="field">
+        <label>API KEY <a href="https://aistudio.google.com/app/apikey" target="_blank" class="hint">→ 获取</a></label>
+        <div class="input-eye">
+          <input id="gemini-key" type="password" placeholder="AIza..." autocomplete="off" />
+          <button type="button" class="eye" data-target="gemini-key" title="显示/隐藏">SHOW</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- OpenAI panel -->
+    <div class="prov-panel" id="panel-openai" style="display:none">
+      <div class="field">
+        <label>BASE URL</label>
+        <input id="openai-base" type="text" placeholder="https://api.openai.com/v1" />
+        <div class="sub-hint">兼容任何 OpenAI Chat Completions 格式: OpenAI / DeepSeek / Groq / Together / 本地 LM Studio / Ollama 等</div>
+      </div>
+      <div class="field">
+        <label>MODEL</label>
+        <input id="openai-model" type="text" placeholder="gpt-4o-mini" />
+      </div>
+      <div class="field">
+        <label>API KEY</label>
+        <div class="input-eye">
+          <input id="openai-key" type="password" placeholder="sk-..." autocomplete="off" />
+          <button type="button" class="eye" data-target="openai-key" title="显示/隐藏">SHOW</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:18px;border-top:1px solid var(--panel-edge);padding-top:14px">
+      <label>样本源 <span style="color:var(--txt-faint);font-weight:400;letter-spacing:.05em;text-transform:none">(切换需刷新页面生效)</span></label>
+      <div class="tabs" id="source-tabs">
+        <button class="tab" data-src="auto">AUTO</button>
+        <button class="tab" data-src="local">本地</button>
+        <button class="tab" data-src="remote">远程 CDN</button>
+      </div>
+      <div class="sub-hint">
+        <b>Auto</b>: 优先本地,失败回落 CDN(推荐) ·
+        <b>本地</b>: 只用 vendor/ 离线包 ·
+        <b>远程</b>: 只用 jsdelivr / strudel.b-cdn.net
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="ghost" id="key-cancel">取消</button>
+      <button id="key-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== HINTS MODAL ============== -->
+<div class="modal-bg" id="hints-modal" style="display:none">
+  <div class="modal modal-hints">
+    <button class="modal-close" id="hints-close" title="关闭 (Esc)">×</button>
+    <h2>HINTS · <span class="a">提示词模板</span></h2>
+    <div class="hints-meta">点击任意提示插入到输入框 · <span class="kbd">ESC</span> 关闭</div>
+    <div class="hints-body" id="hints-body"></div>
+  </div>
+</div>
+
+<!-- ============== STRUDEL VISUAL OVERLAY (全屏, 不挡 UI) ============== -->
+<canvas id="test-canvas" aria-hidden="true"></canvas>
+
+<!-- ============== STRUDEL ============== -->
+<script type="module">
+  // 每个 manifest 都有 local 和 remote 两套源,按用户偏好选择
+  const SAMPLE_MANIFESTS = [
+    { name: "dirt-samples",        local: "./vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
+    { name: "tidal-drum-machines", local: "./vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
+    { name: "piano",               local: "./vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
+    { name: "vcsl",                local: "./vendor/samples/vcsl.json",                 remote: "https://strudel.b-cdn.net/vcsl.json" },
+  ];
+  // 本地 bundle 已经把 @strudel/draw 一起打包,视觉链式方法 (.pianoroll/.scope 等) 全部可用
+  const ENGINE_LOCAL  = "./vendor/strudel/index.mjs";
+  const ENGINE_REMOTE = "https://esm.sh/@strudel/web@1.3.0";
+
+  // 读偏好: "auto"(默认) | "local" | "remote"
+  const sourcePref = localStorage.getItem("vibestrudel.sampleSource") || "auto";
+  window.__sampleSourcePref = sourcePref;
+
+  function urlOrder(local, remote){
+    if (sourcePref === "local")  return [{ url: local,  tag: "local" }];
+    if (sourcePref === "remote") return [{ url: remote, tag: "remote" }];
+    return [{ url: local, tag: "local" }, { url: remote, tag: "remote" }];
+  }
+  // 引擎: 本地优先 (含 draw, 离线可用), 远程作 fallback
+  function engineOrder(){
+    if (sourcePref === "local")  return [{ url: ENGINE_LOCAL,  tag: "local" }];
+    if (sourcePref === "remote") return [{ url: ENGINE_REMOTE, tag: "remote" }];
+    return [{ url: ENGINE_LOCAL, tag: "local" }, { url: ENGINE_REMOTE, tag: "remote" }];
+  }
+
+  try {
+    // 引擎
+    let mod, engineSrc;
+    for (const c of engineOrder()){
+      try { mod = await import(c.url); engineSrc = c.tag; break; }
+      catch(e){ console.warn(`[strudel-engine] ${c.tag} 失败,尝试下一个:`, e.message); }
+    }
+    if (!mod) throw new Error("无法加载 Strudel 引擎");
+    window.__strudelEngineSource = engineSrc;
+
+    // 本地引擎已 bundle draw; 远程引擎需要额外加载 draw (但可能 Pattern 类不共享, 视觉不可保证)
+    let visualOK = false;
+    if (engineSrc === "local"){
+      visualOK = true;  // bundle 自带
+    } else {
+      try {
+        await import("https://esm.sh/@strudel/draw@1.2.6");
+        // 注意: 远程 engine 的 Pattern 类与 draw 的 Pattern 可能不共享, 视觉可能不工作
+      } catch(_){}
+    }
+    window.__strudelVisualAvailable = visualOK;
+    window.dispatchEvent(new CustomEvent("strudel:visual-status", { detail: { ok: visualOK, engine: engineSrc }}));
+
+    // 全屏 canvas
+    const vizCanvas = document.getElementById("test-canvas");
+    function resizeViz(){
+      const dpr = window.devicePixelRatio || 1;
+      vizCanvas.width  = Math.max(1, Math.floor(window.innerWidth  * dpr));
+      vizCanvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
+    }
+    resizeViz();
+    window.addEventListener("resize", resizeViz);
+
+    window.__strudelReady = mod.initStrudel({
+      drawContext: vizCanvas.getContext("2d", { willReadFrequently: true }),
+      prebake: async () => {
+        window.dispatchEvent(new CustomEvent("strudel:samples-loading", { detail: { pref: sourcePref }}));
+        const loaded = [];
+        const failed = [];
+        for (const m of SAMPLE_MANIFESTS){
+          let ok = false;
+          for (const c of urlOrder(m.local, m.remote)){
+            try {
+              await window.samples(c.url);
+              loaded.push(`${m.name}(${c.tag})`);
+              ok = true; break;
+            } catch (e) {
+              console.warn(`[samples] ${m.name} ${c.tag} 失败:`, e.message);
+            }
+          }
+          if (!ok) failed.push(m.name);
+        }
+        if (loaded.length === 0){
+          window.dispatchEvent(new CustomEvent("strudel:samples-error", { detail: new Error("所有样本源都失败 (pref=" + sourcePref + ")") }));
+        } else {
+          window.dispatchEvent(new CustomEvent("strudel:samples-loaded", { detail: { name: loaded.join(" + "), failed, pref: sourcePref, engine: engineSrc }}));
+        }
+      },
+    });
+    window.dispatchEvent(new CustomEvent("strudel:loaded"));
+  } catch (err) {
+    console.error("Strudel load failed:", err);
+    window.__strudelLoadError = err;
+    window.dispatchEvent(new CustomEvent("strudel:error", { detail: err }));
+  }
+</script>
+
+<!-- ============== APP LOGIC ============== -->
+<script>
+(() => {
+  // ---------- DOM refs ----------
+  const $  = (id) => document.getElementById(id);
+  const codeDisplay = $("code-display");
+  const logEl       = $("log");
+  const promptEl    = $("prompt");
+  const sendBtn     = $("send-btn");
+  const playBtn     = $("btn-play");
+  const stopBtn     = $("btn-stop");
+  const bpmInput    = $("bpm-input");
+  const bpmReadout  = $("bpm-readout");
+  const bpmDown     = $("bpm-down");
+  const bpmUp       = $("bpm-up");
+  const ledAi       = $("led-ai");
+  const ledAudio    = $("led-audio");
+  const ledErr      = $("led-err");
+  const liveBadge   = $("live-badge");
+  const cycleBadge  = $("cycle-badge");
+  const meter       = $("meter");
+  const apiKeyBtn   = $("api-key-btn");
+
+  // ---------- LLM config (multi-provider) ----------
+  const LS = {
+    provider: "vibestrudel.provider",
+    geminiKey: "vibestrudel.geminiKey",
+    geminiModel: "vibestrudel.geminiModel",
+    openaiKey: "vibestrudel.openaiKey",
+    openaiModel: "vibestrudel.openaiModel",
+    openaiBase: "vibestrudel.openaiBase",
+    // legacy
+    legacyKey: "vibestrudel.apiKey",
+  };
+  const llm = {
+    provider: localStorage.getItem(LS.provider) || "gemini",
+    geminiKey: localStorage.getItem(LS.geminiKey) || localStorage.getItem(LS.legacyKey) || "",
+    geminiModel: localStorage.getItem(LS.geminiModel) || "gemini-2.5-flash",
+    openaiKey: localStorage.getItem(LS.openaiKey) || "",
+    openaiModel: localStorage.getItem(LS.openaiModel) || "gpt-4o-mini",
+    openaiBase: localStorage.getItem(LS.openaiBase) || "https://api.openai.com/v1",
+  };
+  const SOURCE_LS = "vibestrudel.sampleSource";
+  let sourcePref = localStorage.getItem(SOURCE_LS) || "auto";  // auto | local | remote
+  // migrate legacy
+  if (localStorage.getItem(LS.legacyKey) && !localStorage.getItem(LS.geminiKey)){
+    localStorage.setItem(LS.geminiKey, localStorage.getItem(LS.legacyKey));
+  }
+  function llmCurrentKey(){ return llm.provider === "gemini" ? llm.geminiKey : llm.openaiKey; }
+  function llmCurrentModel(){ return llm.provider === "gemini" ? llm.geminiModel : llm.openaiModel; }
+  function updateModelBadge(){
+    const b = $("model-badge");
+    if (!b) return;
+    const prov = llm.provider === "gemini" ? "GEMINI" : "OPENAI";
+    b.textContent = `${prov} · ${llmCurrentModel().toUpperCase()}`;
+  }
+
+  // ---------- State ----------
+  const state = {
+    code: "",
+    bpm: 120,
+    playing: false,
+    cycle: 0,
+    busy: false,
+    history: [],   // {role:"user"|"assistant", content}
+  };
+
+  // ---------- Logging ----------
+  function log(tag, msg, opts={}){
+    const row = document.createElement("div");
+    row.className = "row";
+    const ts = new Date().toTimeString().slice(0,8);
+    row.innerHTML =
+      `<span class="ts">${ts}</span>`+
+      `<span class="tag ${tag}">${tag}</span>`+
+      `<span class="msg"></span>`;
+    row.querySelector(".msg").textContent = msg;
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+    // fade old rows
+    const rows = logEl.querySelectorAll(".row");
+    rows.forEach((r,i) => r.classList.toggle("fade", i < rows.length - 18));
+  }
+
+  // ---------- Syntax highlight (lightweight) ----------
+  function highlight(code){
+    // escape first
+    let s = code
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;");
+    // strings
+    s = s.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,'<span class="tok-str">$1</span>');
+    // comments
+    s = s.replace(/(\/\/[^\n]*)/g,'<span class="tok-cmt">$1</span>');
+    // numbers
+    s = s.replace(/\b(\d+\.?\d*)\b/g,'<span class="tok-num">$1</span>');
+    // method chains .name(
+    s = s.replace(/\.([a-zA-Z_][\w]*)(?=\()/g,'.<span class="tok-method">$1</span>');
+    // top-level functions
+    const fns = ["stack","cat","seq","s","n","note","sound","setcpm","cpm","silence","hush","samples","arrange","timeCat"];
+    fns.forEach(f=>{
+      const re = new RegExp(`\\b${f}(?=\\()`,"g");
+      s = s.replace(re,`<span class="tok-fn">${f}</span>`);
+    });
+    // keywords
+    s = s.replace(/\b(await|const|let|var|function|return|if|else)\b/g,'<span class="tok-kw">$1</span>');
+
+    // 用 div.code-line 包每一行,行号由 CSS counter 通过 ::before 渲染 (不会被复制)
+    const lines = s.split("\n");
+    return lines.map((ln,i)=>`<div class="code-line" data-ln="${i+1}">${ln || "&#8203;"}</div>`).join("");
+  }
+
+  // 解析 Strudel 抛出的错误,提取 <anonymous>:LINE:COL
+  function parseErrorLocation(err){
+    if (!err?.stack) return null;
+    const m = err.stack.match(/<anonymous>:(\d+):(\d+)/);
+    if (m) return { line: +m[1], col: +m[2] };
+    return null;
+  }
+  function clearErrorMark(){
+    document.querySelectorAll(".code-line.err").forEach(el=>{
+      el.classList.remove("err");
+      const tip = el.querySelector(".err-tip");
+      if (tip) tip.remove();
+    });
+  }
+  function markErrorLine(lineNum, msg){
+    clearErrorMark();
+    const el = document.querySelector(`.code-line[data-ln="${lineNum}"]`);
+    if (!el) return;
+    el.classList.add("err");
+    if (msg){
+      const tip = document.createElement("span");
+      tip.className = "err-tip";
+      tip.textContent = "→ " + msg.split("\n")[0].slice(0, 200);
+      el.appendChild(tip);
+    }
+    el.scrollIntoView({ block:"nearest", behavior:"smooth" });
+  }
+
+  // 关键: Strudel 的解析错误不通过 throw 抛出,而是 dispatch 'strudel.log' 事件
+  // 监听这个事件才能拿到解析/库错误并显示到 UI
+  let strudelLogJustHandled = false;
+  document.addEventListener("strudel.log", (e)=>{
+    const msg = e.detail?.message || "";
+    if (/\berror[: ]/i.test(msg)){
+      strudelLogJustHandled = true;
+      const m = msg.match(/\((\d+):(\d+)\)/);
+      if (m){
+        const line = +m[1], col = +m[2];
+        markErrorLine(line, msg);
+        log("err", `L${line}:${col}  ${msg}`);
+      } else {
+        log("err", msg);
+      }
+      setLed(ledErr, true);
+    } else if (/\bcode updated\b/i.test(msg)){
+      // 解析成功 — 清掉之前的错误标记
+      clearErrorMark();
+      setLed(ledErr, false);
+    }
+  });
+  function setCode(code){
+    state.code = code;
+    codeDisplay.innerHTML = highlight(code);
+    // 清掉 EDITED 标记(若存在)
+    state.codeDirty = false;
+    const db = document.getElementById("dirty-badge");
+    if (db) db.style.display = "none";
+  }
+
+  // ---------- LED helpers ----------
+  function setLed(el,on,pulse=false){
+    el.classList.toggle("on", !!on);
+    el.classList.toggle("pulse", !!pulse);
+  }
+
+  // ---------- Strudel control ----------
+  // Kick off AudioContext.resume() synchronously while a user gesture is
+  // still active. Must be called as the FIRST thing in any user-triggered
+  // handler — never after an `await` (LLM call etc.) or activation expires.
+  function unlockAudioNow(){
+    try {
+      const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
+      if (ctx && ctx.state !== "running") ctx.resume();  // intentionally not awaited
+    } catch(_){}
+  }
+
+  async function ensureStrudel(){
+    if (window.__strudelLoadError){
+      throw new Error("Strudel CDN 加载失败: " + (window.__strudelLoadError.message || window.__strudelLoadError));
+    }
+    if (!window.__strudelReady){
+      // wait briefly for the module script to finish
+      await new Promise((res, rej) => {
+        const t = setTimeout(()=>rej(new Error("Strudel 初始化超时,请检查网络/CDN")), 8000);
+        window.addEventListener("strudel:loaded", ()=>{clearTimeout(t);res();}, { once:true });
+        window.addEventListener("strudel:error", e=>{clearTimeout(t);rej(e.detail||new Error("Strudel 加载错误"));}, { once:true });
+      });
+    }
+    await window.__strudelReady;
+  }
+
+  async function evaluatePattern(code){
+    await ensureStrudel();
+    if (typeof window.evaluate !== "function"){
+      throw new Error("Strudel 全局未注册 (evaluate 不可用)");
+    }
+    // resume AudioContext in case we suspended it via HUSH
+    try {
+      const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
+      if (ctx && ctx.state !== "running") await ctx.resume();
+    } catch(_){}
+    try{
+      strudelLogJustHandled = false;
+      await window.evaluate(code);
+      // 不主动 clearErrorMark; 解析失败时由 strudel.log 'error' 标记,成功时由 'code updated' 清
+      state.playing = true;
+      state.cycle++;
+      cycleBadge.textContent = "CYCLE " + state.cycle;
+      liveBadge.textContent = "LIVE";
+      liveBadge.classList.add("live");
+      setLed(ledAudio,true,true);
+      setLed(ledErr,false);
+      playBtn.disabled = false;
+      stopBtn.disabled = false;
+      playBtn.classList.add("on");
+      animateMeter();
+    } catch(err){
+      // strudel.log 已经处理过的就不重复打 (避免相同错误出两条)
+      if (!strudelLogJustHandled){
+        setLed(ledErr,true);
+        const loc = parseErrorLocation(err);
+        const msg = err.message || String(err);
+        if (loc){
+          markErrorLine(loc.line, msg);
+          log("err",`L${loc.line}:${loc.col}  ${msg}`);
+        } else {
+          log("err","Strudel 执行失败: " + msg);
+        }
+      }
+      throw err;
+    }
+  }
+
+  function hushAll(){
+    try { if (typeof window.hush === "function") window.hush(); } catch(_){}
+    try {
+      const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
+      if (ctx && ctx.state === "running") ctx.suspend();
+    } catch(_){}
+    state.playing = false;
+    setLed(ledAudio,false);
+    playBtn.classList.remove("on");
+    liveBadge.textContent = "STANDBY";
+    meter.dataset.level = "0";
+    document.querySelectorAll(".preset-pad.active").forEach(el=>el.classList.remove("active"));
+  }
+
+  let meterTimer = null;
+  function animateMeter(){
+    clearInterval(meterTimer);
+    meterTimer = setInterval(()=>{
+      if (!state.playing){ meter.dataset.level = "0"; return; }
+      meter.dataset.level = String(2 + Math.floor(Math.random()*4));
+    }, 220);
+  }
+
+  // ---------- BPM ----------
+  function setBpm(v){
+    v = Math.max(40, Math.min(240, +v|0));
+    state.bpm = v;
+    bpmInput.value = v;
+    bpmReadout.textContent = v;
+    if (typeof window.setcpm === "function"){
+      try { window.setcpm(v / 4); } catch(_){}
+    }
+  }
+
+  // ---------- Gemini ----------
+  const SYSTEM_PROMPT = `You are a live-coding co-performer for Strudel (a JavaScript port of TidalCycles).
+You translate natural-language "vibe" instructions (Chinese or English) into rich, musical, well-mixed Strudel programs.
+
+== STRUDEL QUICK REFERENCE ==
+Sounds:
+  s("bd sd hh cp")           // drums: bd kick, sd snare, hh hihat, oh open-hh, cp clap, rim, lt mt ht toms, cb cowbell
+  s("bd*4")  s("[bd sd]*2")  // repeats / grouping
+  note("c2 eb2 g2").s("sawtooth")
+  note("<c eb g bb>").s("triangle")  // < > = one per cycle
+  n("0 2 4 5").scale("C:minor").s("triangle")   // NOTE: "piano"/"guitar"/etc. NOT available — use synth waveforms
+
+Layering:
+  stack(p1, p2, p3)    // simultaneous
+  cat(p1, p2)          // alternate cycles
+
+Effects (chain with .):
+  .gain(0.6)  .pan(0.3)
+  .lpf(800)  .hpf(200)  .lpq(6)         // filter + resonance
+  .attack(0.5)  .release(2)             // amplitude envelope (CRITICAL for pads)
+  .lpenv(4)  .lpa(0.01)  .lpr(0.4)      // filter envelope
+  .room(0.5)  .roomsize(0.8)
+  .delay(0.5)  .delaytime(0.375)  .delayfb(0.5)
+  .distort(0.6)  .shape(0.4)  .crush(8)  .coarse(4)
+  .phaser(1)  .vowel("a")
+  .bank("RolandTR909") | .bank("RolandTR808")
+  .struct("1 0 1 1")  .ply(2)
+  .sometimes(x => x.fast(2))
+  .every(4, x => x.rev())
+  .iter(4)            // rotate pattern across cycles
+  .slow(2)  .fast(2)
+  .pan(sine.range(-0.5, 0.5).slow(8))   // moving pan
+
+Tempo:  setcpm(BPM/4)   // for 4/4 time
+
+== VISUAL FUNCTIONS (chained Pattern methods only) ==
+Draw to a full-screen overlay canvas. All are chained on a Pattern (NEVER as top-level functions).
+
+DRAWING METHODS:
+  .pianoroll()                          // notes scroll left-to-right (default, most common)
+  .pianoroll({ vertical: 1 })           // scroll top-down
+  .pianoroll({ fold: 1 })               // fold all notes into one octave
+  .pianoroll({ smear: 0.5 })            // each note leaves a fading trail
+  .pianoroll({ cycles: 8 })             // show 8 cycles of history (default 4)
+  .pianoroll({ flipTime: 1 })           // reverse time direction
+  .punchcard()                          // dot grid — good for drum patterns
+  .pitchwheel()                         // circular pitch wheel
+  .spiral()                             // spiral note view
+  .wordfall()                           // labels fall like subtitles
+  .scope()                              // oscilloscope (audio waveform)
+  .scope({ trigger: 1 })                // trigger-sync,波形稳定不漂移
+  .scope({ thickness: 5, scale: 0.7, pos: 0.5, color: "cyan" })  // pos: 0..1 垂直位置, scale 高度
+  .fscope()                             // frequency-scope (带拖尾,可加 { smear: 0.4 })
+  .spectrum()                           // frequency analyzer (柱状)
+  .spectrum({ db: -60, max: 0 })
+
+COLOR (only visible when combined with a drawing method above):
+  .color("orange")                      // single color tag
+  .color("<red orange yellow lime>")    // cycles one color per cycle (rainbow over time)
+  .color("red orange yellow")           // alternates per event in the cycle (gradient look)
+  .colour() is alias of .color()
+  Names: red orange yellow lime green cyan blue magenta purple white gray pink hotpink steelblue gold
+
+CRITICAL: .color() ALONE shows nothing.
+  WRONG: stack( s("bd*4").color("red") )                          // nothing visible
+  RIGHT: stack( s("bd*4").color("red") ).pianoroll()              // pianoroll renders all voices in their colors
+  RIGHT: s("bd*4").color("red").punchcard()                        // single-voice punchcard
+
+ABSOLUTELY FORBIDDEN (NOT exported, will throw "is not defined"):
+  ❌ scope()  ❌ spectrum()  ❌ pianoroll() top-level (no chain)  ❌ punchcard() top-level
+
+When the user asks for any kind of visualization — ALWAYS end the program with .pianoroll() on the outer stack(), and additionally use .color() / .punchcard() per voice as needed.
+
+== SOUND DESIGN — THIS IS THE MOST IMPORTANT PART ==
+Every synth voice MUST have explicit gain, filter, and envelope. Never emit raw sawtooth without taming it.
+
+PADS / 氛围 / atmosphere — soft, slow, never harsh:
+  • use sine, triangle, OR sawtooth+heavy LPF
+  • ALWAYS .attack(0.5..2).release(2..4)  (long swells)
+  • ALWAYS .lpf(400..900).lpq(1..3)
+  • .gain(0.25..0.4) max
+  • .room(0.6..0.8) for space
+  • use long notes: note("<c eb g>/4") = one note every 4 cycles
+  Example:
+    note("<c3 eb3 g3 bb3>/4").s("sawtooth").lpf(600).lpq(2).attack(1.5).release(3).gain(0.3).room(0.7)
+
+BASS / 低音:
+  • s("sawtooth") or "square", .lpf(300..600), .lpq(4..10) for punch
+  • .attack(0.01).release(0.2..0.4)
+  • .gain(0.7..0.85)
+  Example:
+    note("c2 c2 eb2 c2").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.25).gain(0.8)
+
+LEADS / 主旋律:
+  • triangle or sawtooth with .lpf(1200..2500)
+  • .attack(0.02).release(0.3)
+  • .gain(0.4..0.55), add .delay(0.4).delaytime(0.375).delayfb(0.4) for life
+  • Use variation: note("<c4 eb4 g4 f4>") or .every(4, x => x.fast(2))
+
+CHORDS / 和弦:
+  • use n("0,2,4").scale("C:minor").s("triangle") — NOT .s("piano") (pack not loaded)
+  • .gain(0.4), .lpf(2000), .room(0.4)
+
+DRUMS:
+  • prefer .bank("RolandTR909") for techno/house, "RolandTR808" for hip-hop/lo-fi
+  • kick .gain(0.9), snare/clap .gain(0.55), closed hat .gain(0.35), open hat .gain(0.4)
+  • give hats motion: .pan(sine.range(-0.3, 0.3))
+
+== MIX HYGIENE ==
+  • Every voice MUST have an explicit .gain — never default
+  • Cap at 5–6 simultaneous voices
+  • Pads/leads ALWAYS include .lpf — uncovered sawtooth is forbidden
+  • .room ≤ 0.7, .delayfb ≤ 0.7  (avoid runaway feedback)
+  • Frequency separation: bass low, lead mid, pad covering chord tones, drums on top
+
+== CRITICAL VALIDITY RULES — VIOLATING THESE BREAKS THE PATTERN ==
+1. AVAILABLE SOUNDS in .s():
+     • Synth waveforms: "sine","triangle","saw","sawtooth","square","pulse","white","pink","brown"
+     • Drum samples — MUST use these 2-letter codes (NEVER long names like "ride"/"crash"/"tambourine"):
+         bd  bass drum / kick     sd  snare drum         hh  closed hi-hat
+         oh  open hi-hat          cp  clap               rim rim shot
+         lt  low tom              mt  mid tom            ht  high tom
+         cb  cowbell              cr  CRASH (not "crash") rd  RIDE (not "ride")
+         sh  shaker               tb  tambourine
+         perc misc fx             — generic buckets in some banks
+
+     • Coverage in the 72 drum-machine banks (use these to pick the right bank for the drum you want):
+         bd/sd/hh: in almost every bank (70/66/59 of 72) — always safe
+         oh: 58/72 — RolandTR909, RolandTR808 are safe choices
+         ht/mt/lt: 49/38/46 — use RolandTR* for these
+         cr/rd: only 43/33 of 72 — use RolandTR909 or AlesisSR16 etc.
+         sh/tb: 28/26 — use RolandTR707 or specific drum machines
+         perc/misc/fx: very sparse — don't rely on these unless user explicitly asks
+
+     • In default dirt-samples (no bank): only bd, sd, hh, cp, cb, lt, mt, ht exist as bare names.
+       For oh / rim / cr / rd / sh / tb you MUST chain a valid .bank() — e.g. .bank("RolandTR909").
+       Examples:
+         WRONG:  s("~ ~ ~ ride").bank("AlesisSR16")        // "ride" doesn't exist; use "rd"
+         WRONG:  s("~ ~ ~ crash").bank("RolandTR909")      // "crash" doesn't exist; use "cr"
+         WRONG:  s("~ rim ~ rim")                          // no bank → throws
+         RIGHT:  s("~ ~ ~ rd").bank("AlesisSR16").gain(0.4)
+         RIGHT:  s("~ ~ ~ cr").bank("RolandTR909").gain(0.4)
+         RIGHT:  s("~ rim ~ rim").bank("RolandTR909").gain(0.5)
+     • Drum-machine BANKS via .bank("NAME") — combined with the drum letters above. NAME must EXACTLY match one of these 72 case-sensitive names (NO others, never invent):
+         AJKPercusyn AkaiLinn AkaiMPC60 AkaiXR10 AlesisHR16 AlesisSR16 BossDR110 BossDR220 BossDR55 BossDR550 BossDR660 CasioRZ1 CasioSK1 CasioVL1 DoepferMS404 EmuDrumulator EmuModular EmuSP12 KorgDDM110 KorgKPR77 KorgKR55 KorgKRZ KorgM1 KorgMinipops KorgPoly800 KorgT3 Linn9000 LinnDrum LinnLM1 LinnLM2 MFB512 MoogConcertMateMG1 MPC1000 OberheimDMX RhodesPolaris RhythmAce RolandCompurhythm1000 RolandCompurhythm78 RolandCompurhythm8000 RolandD110 RolandD70 RolandDDR30 RolandJD990 RolandMC202 RolandMC303 RolandMT32 RolandR8 RolandS50 RolandSH09 RolandSystem100 RolandTR505 RolandTR606 RolandTR626 RolandTR707 RolandTR727 RolandTR808 RolandTR909 SakataDPM48 SequentialCircuitsDrumtracks SequentialCircuitsTom SergeModular SimmonsSDS400 SimmonsSDS5 SoundmastersR88 UnivoxMicroRhythmer12 ViscoSpaceDrum XdrumLM8953 YamahaRM50 YamahaRX21 YamahaRX5 YamahaRY30 YamahaTG33
+       ❌ NEVER use .bank("initials"), .bank("custom"), .bank("user"), .bank("trap"), .bank("dnb"), .bank("808") (without "RolandTR" prefix) — these throw "sound NAME_X not found".
+     • Piano: .s("piano")  ← Salamander Grand Piano, polyphonic, use with note() — perfect for jazz/lo-fi/ambient
+     • Orchestral & world (VCSL pack, 128 instruments) — supports note() for pitched ones. Common picks:
+         Mallets:   "marimba","kalimba","glockenspiel","vibraphone","tubularbells","xylophone_hard_ff"
+         Keys:      "piano1","kawai","fmpiano","organ_full","pipeorgan_loud"
+         Strings:   "harp","folkharp","psaltery_pluck","dantranh"
+         Winds:     "ocarina","recorder_alto_sus","sax","harmonica","didgeridoo"
+         Perc:      "bongo","conga","cajon","darbuka","tambourine","clave","cowbell","cabasa","shaker_large","framedrum","gong","tubularbells","woodblock","triangle1","handbells","sleighbells"
+         FX:        "ballwhistle","trainwhistle","siren","slapstick","wineglass","oceandrum","anvil","ratchet"
+     • If you're not sure a name exists, stick to the synth waveforms + drum letters above — those are always safe.
+2. CONTINUOUS MODULATORS — only these exist:
+     • sine.range(min, max).slow(n)   — smooth oscillation
+     • rand.range(min, max)            — random per event
+     • perlin.range(min, max)          — smooth random
+     • irand(n)                        — random integer 0..n-1
+     NEVER use \`lin\`, \`linrange\`, \`lin.range\`, \`exp.range\`, or any other non-existent helper — they DON'T EXIST and will throw "is not defined".
+3. PAN RANGE — STRICT LIMITS (browser clamps and warns otherwise):
+     The ONLY acceptable forms of .pan():
+       .pan(0)                                        // center
+       .pan(0.3)  .pan(-0.3)                          // any number in [-0.7, 0.7]
+       .pan(sine.range(-0.5, 0.5).slow(N))            // smooth oscillation
+       .pan(sine.range(-0.3, 0.3))                    // tighter
+       .pan("0 0.3 -0.3 0")                           // discrete pattern values, each in [-0.7, 0.7]
+     ABSOLUTELY FORBIDDEN — these all clip / warn:
+       ❌ .pan(sine)                  // raw sine outputs -1..1 with overshoot,会触发 clamp 警告
+       ❌ .pan(rand)                  // 0..1 random, sometimes too wide
+       ❌ .pan(sine.range(-1, 1))     // bound exactly at limit triggers warnings
+       ❌ .pan(sine.range(-1.5, 1.5)) // 任何超过 1 的 range 一律禁止
+       ❌ .pan(sine.range(-Math.PI, Math.PI))  // π ≈ 3.14, far too big
+     RULE OF THUMB: pan range ≤ ±0.7. Default to ±0.3 for hi-hat motion.
+4. CHORDS: use note("[c,eb,g]") with square brackets and comma inside a pattern position. NOT \`chord()\` (doesn't exist).
+5. SCALE: .scale("ROOT:MODE") — root and mode joined by COLON, no spaces, all inside ONE string.
+     • Valid roots: c d e f g a b plus # or b (e.g. "F#:dorian", "Bb:major", "C:harmonic-minor")
+     • Valid modes: minor major dorian phrygian lydian mixolydian locrian harmonic-minor melodic-minor pentatonic
+     • To change root: rewrite the scale string, e.g. .scale("D:minor")
+     • ❌ NEVER chain .root("c4") — does NOT exist, throws "root is not a function"
+     • ❌ NEVER chain .mode(...) — does NOT exist
+     • ❌ NEVER use spaces inside scale string — throws "[tonal] error: Scale name X is incomplete"
+   Examples:
+     RIGHT: n("0 2 4 7").scale("C:minor").s("triangle")
+     RIGHT: n("0 2 4 7").scale("C:harmonic-minor").s("triangle")
+     RIGHT: n("0 2 4 7").scale("F#:dorian").s("piano")
+     WRONG: n("0 2 4 7").scale("minor").root("C")           // throws "root is not a function"
+     WRONG: n("0 2 4 7").scale("C harmonic-minor")          // throws "[tonal] Scale name incomplete"
+     WRONG: n("0 2 4 7").scale("C:harmonic minor")          // space inside mode → throws
+
+6. JS SYNTAX SAFETY — the code you emit is plain JavaScript and MUST parse.
+     • Strings: ALWAYS close every " or ' (or backtick). Watch for nested quotes; use the other style or escape.
+     • Numbers: never put an identifier directly after a number (e.g. 7minor is invalid). If you mean text, wrap in quotes: "7minor".
+     • Method chains: ensure every .method( has a matching ). Parentheses must balance.
+     • Common AI bug: writing .scale(C:minor) without quotes — that's not a string, throws SyntaxError. Always: .scale("C:minor").
+
+== RICHNESS RECIPES ==
+For "丰富/rich/复杂/full" or default starting jams, layer at minimum:
+  1. Drums (kick + snare/clap + hats with motion)
+  2. Bass with rhythmic .struct or short note pattern
+  3. Chord/pad (long notes, slow envelope, low gain)
+  4. Lead or melodic counterpoint with cycle-level variation (<a b c d>)
+  5. Optional perc accent (.s("cp").bank("RolandTR909"), .ply, or sometimes(fast))
+
+USE VARIATION — static loops feel boring. Sprinkle these in:
+  <a b c d>            — one per cycle
+  .every(4, x => x.rev())
+  .sometimes(x => x.fast(2))
+  .iter(4)
+  .ply("<1 2 3>")
+  .pan(sine.range(-0.5, 0.5).slow(8))
+
+== REFERENCE EXAMPLE — a properly rich 128 BPM techno jam ==
+setcpm(128/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.9),
+  s("~ cp ~ cp").bank("RolandTR909").gain(0.55).room(0.3),
+  s("hh*8").bank("RolandTR909").gain(0.35).pan(sine.range(-0.3,0.3).slow(4)),
+  s("~ ~ ~ oh").bank("RolandTR909").gain(0.4).room(0.2),
+  note("c2 c2 eb2 c2").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.25).gain(0.8),
+  note("<c4 eb4 g4 bb4>").s("triangle").lpf(1500).attack(0.02).release(0.4).gain(0.45).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.3),
+  note("<c3 eb3 g3>/4").s("sawtooth").lpf(700).lpq(2).attack(1.2).release(3).gain(0.28).room(0.7)
+)
+
+== RULES ==
+1. Output ONLY a single executable Strudel program in the "code" field — no markdown fences, no top comments.
+2. If user mentions BPM, put setcpm(BPM/4) on line 1.
+3. Build INCREMENTALLY on previous code when user says "add/more/也/加/再/增加/还要"; replace fully on "重来/换一个/fresh".
+4. Wrap multiple voices in stack(...).
+5. EVERY synth voice carries .gain + .lpf (if non-sine) + envelope. Pads are NEVER bare sawtooth.
+6. For "撕裂/distort/脏" → .distort(0.4..0.7) or .shape on the targeted voice only, not master.
+7. For "迷幻/psychedelic/dub" → .delay + .room + maybe .phaser.
+8. For "空灵/ambient/ethereal" → long pad with attack ≥1, release ≥3, lpf ≤800, room ≥0.6.
+9. NEVER emit fewer than 4 voices unless the user EXPLICITLY says "minimal / sparse / 极简 / 简约 / 只要X / just X / 只有X". Default richness is 4–6 voices.
+10. "启动 / 开始 / 起 / start / kick off / let's go" = BEGIN A FULL JAM. Even if the user only names one instrument (e.g. "启动 4/4 底鼓"), produce a COMPLETE mix: drums + bass + chord/pad + optional lead. The named instrument is the ANCHOR/centerpiece, not the only voice. NEVER respond to a "start" command with just one or two lines of code.
+    WRONG response to "启动 128bpm 的 4/4 拍底鼓":
+      setcpm(128/4)
+      stack( s("bd*4").bank("RolandTR909").gain(0.9) )
+    RIGHT response: a full 5–6 voice techno jam at 128 BPM with bd*4 as the centerpiece (see REFERENCE EXAMPLE above — match that density).
+11. Return JSON: {"code":"<full strudel program>","explanation":"<one short sentence in the user's language>"}.
+
+== CURRENT STATE ==
+Current BPM: __BPM__
+Current code:
+\`\`\`
+__CODE__
+\`\`\`
+`;
+
+  function parseLLMText(text){
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch(_){
+      const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (m){
+        try { parsed = JSON.parse(m[1]); } catch(_){}
+      }
+      if (!parsed){
+        const m2 = text.match(/```(?:js|javascript)?\s*([\s\S]*?)```/);
+        parsed = { code: m2 ? m2[1].trim() : text.trim(), explanation: "" };
+      }
+    }
+    return parsed;
+  }
+
+  async function callLLM(userInstruction, signal){
+    if (!llmCurrentKey()) { openKeyModal(); throw new Error("缺少 API Key"); }
+    const sys = SYSTEM_PROMPT
+      .replace("__BPM__", String(state.bpm))
+      .replace("__CODE__", state.code || "// (empty)");
+
+    if (llm.provider === "gemini"){
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(llm.geminiModel)}:generateContent?key=${encodeURIComponent(llm.geminiKey)}`;
+      const body = {
+        systemInstruction: { parts:[{ text: sys }] },
+        contents: [
+          ...state.history.flatMap(h => ([{
+            role: h.role === "assistant" ? "model" : "user",
+            parts: [{ text: h.content }],
+          }])),
+          { role: "user", parts: [{ text: userInstruction }] }
+        ],
+        generationConfig: {
+          temperature: 0.85,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type:"object",
+            properties:{ code:{type:"string"}, explanation:{type:"string"} },
+            required:["code","explanation"]
+          }
+        }
+      };
+      const res = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body), signal });
+      if (!res.ok){
+        const t = await res.text();
+        throw new Error(`Gemini ${res.status}: ${t.slice(0,200)}`);
+      }
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      return parseLLMText(text);
+    } else {
+      // OpenAI-compatible chat completions
+      const base = (llm.openaiBase || "https://api.openai.com/v1").replace(/\/+$/, "");
+      const url = `${base}/chat/completions`;
+      const messages = [
+        { role:"system", content: sys },
+        ...state.history.map(h => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.content })),
+        { role:"user", content: userInstruction },
+      ];
+      const body = {
+        model: llm.openaiModel || "gpt-4o-mini",
+        messages,
+        temperature: 0.85,
+        response_format: { type: "json_object" },
+      };
+      let res;
+      try {
+        res = await fetch(url, {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", "Authorization": `Bearer ${llm.openaiKey}` },
+          body: JSON.stringify(body),
+          signal,
+        });
+      } catch(e){
+        if (e.name === "AbortError") throw e;
+        throw new Error(`网络/CORS 错误: ${e.message} (检查 base URL 是否支持跨域)`);
+      }
+      if (!res.ok){
+        // some compatible providers reject response_format — retry without it
+        if (res.status === 400){
+          delete body.response_format;
+          res = await fetch(url, {
+            method:"POST",
+            headers:{ "Content-Type":"application/json", "Authorization": `Bearer ${llm.openaiKey}` },
+            body: JSON.stringify(body),
+            signal,
+          });
+        }
+      }
+      if (!res.ok){
+        const t = await res.text();
+        throw new Error(`${llm.provider.toUpperCase()} ${res.status}: ${t.slice(0,240)}`);
+      }
+      const data = await res.json();
+      const text = data?.choices?.[0]?.message?.content || "";
+      return parseLLMText(text);
+    }
+  }
+
+  // ---------- Send flow ----------
+  async function sendInstruction(text){
+    if (!text || state.busy) return;
+    if (!llmCurrentKey()){ openKeyModal(); return; }
+    unlockAudioNow();  // CRITICAL: resume ctx before the LLM await burns user activation
+    state.busy = true;
+    state.abortCtrl = new AbortController();
+    // SEND 按钮变 STOP, 可点击中断
+    sendBtn.classList.add("stop-mode");
+    sendBtn.querySelector("span")?.remove?.();
+    sendBtn.textContent = "✕ STOP";
+    setLed(ledAi,true,true);
+    log("usr", text);
+    promptEl.value = "";
+
+    try{
+      const { code, explanation } = await callLLM(text, state.abortCtrl.signal);
+      // Detect BPM from code
+      const m = code.match(/setcpm\s*\(\s*([\d.]+)\s*(?:\/\s*([\d.]+))?\s*\)/);
+      if (m){
+        const cpm = parseFloat(m[1]) / (m[2] ? parseFloat(m[2]) : 1);
+        const bpm = Math.round(cpm * 4);
+        if (bpm >= 40 && bpm <= 240){ state.bpm = bpm; bpmInput.value = bpm; bpmReadout.textContent = bpm; }
+      }
+      setCode(code);
+      if (explanation) log("ai", explanation);
+      log("sys","执行模式...");
+      await evaluatePattern(code);
+      state.history.push({ role:"user", content: text });
+      state.history.push({ role:"assistant", content: JSON.stringify({code, explanation}) });
+      if (state.history.length > 14) state.history = state.history.slice(-14);
+    } catch(err){
+      if (err.name === "AbortError"){
+        log("sys","已中断当前请求");
+      } else {
+        log("err", err.message || String(err));
+        setLed(ledErr,true);
+      }
+    } finally {
+      state.busy = false;
+      state.abortCtrl = null;
+      sendBtn.classList.remove("stop-mode");
+      sendBtn.textContent = "SEND";
+      setLed(ledAi,false);
+    }
+  }
+
+  // ---------- LLM settings modal ----------
+  function refreshProviderTabs(){
+    document.querySelectorAll("#provider-tabs .tab").forEach(t=>{
+      t.classList.toggle("on", t.dataset.prov === llm.provider);
+    });
+    $("panel-gemini").style.display = llm.provider === "gemini" ? "" : "none";
+    $("panel-openai").style.display = llm.provider === "openai" ? "" : "none";
+  }
+  function refreshSourceTabs(){
+    document.querySelectorAll("#source-tabs .tab").forEach(t=>{
+      t.classList.toggle("on", t.dataset.src === sourcePref);
+    });
+  }
+  function openKeyModal(){
+    $("gemini-key").value   = llm.geminiKey;
+    $("gemini-model").value = llm.geminiModel;
+    $("openai-key").value   = llm.openaiKey;
+    $("openai-model").value = llm.openaiModel;
+    $("openai-base").value  = llm.openaiBase;
+    refreshProviderTabs();
+    refreshSourceTabs();
+    $("key-modal").style.display = "flex";
+  }
+  function closeKeyModal(){ $("key-modal").style.display = "none"; }
+  document.querySelectorAll("#provider-tabs .tab").forEach(t=>{
+    t.addEventListener("click", ()=>{ llm.provider = t.dataset.prov; refreshProviderTabs(); });
+  });
+  // API Key 眼睛切换
+  document.querySelectorAll(".input-eye .eye").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const input = $(btn.dataset.target);
+      const shown = input.type === "text";
+      input.type = shown ? "password" : "text";
+      btn.classList.toggle("on", !shown);
+      btn.textContent = shown ? "SHOW" : "HIDE";
+    });
+  });
+  document.querySelectorAll("#source-tabs .tab").forEach(t=>{
+    t.addEventListener("click", ()=>{ sourcePref = t.dataset.src; refreshSourceTabs(); });
+  });
+  $("key-save").addEventListener("click", ()=>{
+    llm.geminiKey   = $("gemini-key").value.trim();
+    llm.geminiModel = $("gemini-model").value.trim() || "gemini-2.5-flash";
+    llm.openaiKey   = $("openai-key").value.trim();
+    llm.openaiModel = $("openai-model").value.trim() || "gpt-4o-mini";
+    llm.openaiBase  = ($("openai-base").value.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+    localStorage.setItem(LS.provider,     llm.provider);
+    localStorage.setItem(LS.geminiKey,    llm.geminiKey);
+    localStorage.setItem(LS.geminiModel,  llm.geminiModel);
+    localStorage.setItem(LS.openaiKey,    llm.openaiKey);
+    localStorage.setItem(LS.openaiModel,  llm.openaiModel);
+    localStorage.setItem(LS.openaiBase,   llm.openaiBase);
+    const prevSource = window.__sampleSourcePref || "auto";
+    localStorage.setItem(SOURCE_LS,       sourcePref);
+    updateModelBadge();
+    log("sys", `LLM 设置已保存 · ${llm.provider.toUpperCase()} · ${llmCurrentModel()}`);
+    if (sourcePref !== prevSource){
+      log("sys", `样本源 ${prevSource} → ${sourcePref} · 请刷新页面生效`);
+    }
+    closeKeyModal();
+  });
+  $("key-cancel").addEventListener("click", closeKeyModal);
+  apiKeyBtn.addEventListener("click", openKeyModal);
+
+  // ---------- Wire UI ----------
+  sendBtn.addEventListener("click", ()=>{
+    if (state.busy && state.abortCtrl){
+      state.abortCtrl.abort();
+    } else {
+      sendInstruction(promptEl.value.trim());
+    }
+  });
+  promptEl.addEventListener("keydown",(e)=>{
+    // 中文输入法在 composition 时按 Enter 是确认候选,不能当作发送
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && !e.shiftKey){
+      e.preventDefault();
+      sendInstruction(promptEl.value.trim());
+    }
+  });
+  // ---------- Quick chip drawer ----------
+  const QUICK_CHIPS = [
+    { group: "启动", chips: [
+      { label: "完整 techno",    q: "起一段 128 BPM 的完整 techno jam,鼓+贝斯+和弦+pad 都要" },
+      { label: "deep house",     q: "起一段 120 BPM 的 deep house,jazzy 七和弦,温暖低音" },
+      { label: "house",          q: "起一段 124 BPM 的 house jam,完整编排带 off-beat hat" },
+      { label: "DnB",            q: "起一段 174 BPM 的 drum & bass,断裂鼓 + 滚动 sub bass" },
+      { label: "lo-fi",          q: "起一段 88 BPM 慵懒 lo-fi hip-hop,带 jazzy 和弦" },
+      { label: "ambient",        q: "起一段 60 BPM 空灵 ambient,长 pad + 稀疏点缀,无强鼓" },
+      { label: "trap",           q: "起一段 140 BPM 半拍 trap,808 重低音 + hi-hat rolls" },
+      { label: "psytrance",      q: "起一段 140 BPM psytrance,offbeat sub + 16 分 hat" },
+      { label: "dub techno",     q: "起一段 122 BPM dub techno,湿和弦 stab + 深房间" },
+      { label: "minimal",        q: "起一段 126 BPM minimal techno,稀疏 ticky" },
+      { label: "breakbeat",      q: "起一段 135 BPM breakbeat,funky break + 锯齿低音" },
+      { label: "phonk",          q: "起一段 140 BPM phonk,失真鼓 + cowbell + slide bass" },
+      { label: "synthwave",      q: "起一段 110 BPM synthwave,80s 锯齿 arp + gated 军鼓" },
+      { label: "acid",           q: "起一段 130 BPM acid techno,303 风格滑音 + 滤波扫" },
+      { label: "garage",         q: "起一段 135 BPM UK garage,2-step shuffle + sub bass" },
+    ]},
+    { group: "加层", chips: [
+      { label: "+ sub bass",     q: "在现有基础上加一层沉重的 sub bass(sine 波 + 低 LPF)" },
+      { label: "+ 撕裂 bass",    q: "加一层 distort 锯齿 bass" },
+      { label: "+ 空灵 pad",     q: "加一层慢起音空灵 pad,大量混响,长尾" },
+      { label: "+ 暖 pad",       q: "加一层温暖三角波 pad,小调,中量混响" },
+      { label: "+ 主旋律",       q: "加一层带 cycle 变化的主旋律 lead,有 3/8 delay" },
+      { label: "+ arp 琶音",     q: "加一段 16 分音符 arpeggio,在和弦上行" },
+      { label: "+ hi-hat",       q: "加一层细密 hi-hat 让律动更密(8 分或 16 分)" },
+      { label: "+ open hat",     q: "在 off-beat 加 open hat" },
+      { label: "+ clap 拍掌",    q: "在 2 和 4 拍加 clap" },
+      { label: "+ rim",          q: "加 rim shot 做轻打击" },
+      { label: "+ 打击乐",       q: "加一层有变化的打击乐(rim/cb/tom 组合)" },
+      { label: "+ tom 滚动",     q: "加一段 tom 滚动 fill" },
+      { label: "+ 和弦垫底",     q: "加一层 7 和弦垫底,小调,温暖" },
+      { label: "+ vocal chop",   q: "加一段切片 vocal/sample 做点缀" },
+    ]},
+    { group: "效果", chips: [
+      { label: "bass 撕裂",      q: "对 bass 加 distort 0.5 让它撕裂" },
+      { label: "shape 饱和",     q: "对主鼓组加轻微 shape 饱和" },
+      { label: "迷幻延时",       q: "给主要旋律层加 delay 0.5,delaytime 3/8,反馈 0.5" },
+      { label: "ping-pong",      q: "给 lead 加左右乒乓 delay" },
+      { label: "深房间混响",     q: "把 pad 的 room 加到 0.8,roomsize 加大" },
+      { label: "低通柔化",       q: "整体加 LPF 让它更柔和,大约 1500" },
+      { label: "高通去混",       q: "对 pad 和 lead 加 HPF 让低频干净" },
+      { label: "crush 鼓组",     q: "对鼓加 crush 8 做 lo-fi 颗粒感" },
+      { label: "coarse 降采",    q: "对 pad 加 coarse 降采样" },
+      { label: "phaser 扫",      q: "对主旋律加 phaser 慢扫" },
+      { label: "vowel 元音",     q: "对 lead 加 vowel('a') 让它有人声共鸣" },
+      { label: "auto-pan",       q: "对 hi-hat 加 sine 慢摇 pan" },
+    ]},
+    { group: "变化", chips: [
+      { label: "+10 BPM",        q: "把 BPM 加 10" },
+      { label: "−10 BPM",        q: "把 BPM 减 10" },
+      { label: "双倍速 hat",     q: "让 hi-hat 双倍速密度" },
+      { label: "半速 鼓",        q: "把鼓改成 half-time" },
+      { label: "drop",           q: "做一个 drop,只留鼓和 sub bass,持续 2 个 cycle 后所有声部回来" },
+      { label: "build up",       q: "做一个 build up,渐强 + 加密 hat + filter sweep" },
+      { label: "fill 过渡",      q: "在最后一拍加一个 snare/tom 的 fill" },
+      { label: "反向 sample",    q: "把某一层 .rev() 反向" },
+      { label: "polyrhythm",     q: "在打击乐上做 3 over 4 的 polyrhythm" },
+      { label: "swing 律动",     q: "整体加 swing 感,稍微推后第二个 8 分" },
+      { label: "换小调",         q: "把所有调性换到 C 小调" },
+      { label: "换大调",         q: "把所有调性换到 C 大调" },
+      { label: "换 dorian",      q: "把和声换成 D dorian" },
+      { label: "换 phrygian",    q: "把和声换成 E phrygian,更暗更东方" },
+    ]},
+    { group: "氛围", chips: [
+      { label: "更暗",           q: "整体更暗更深,低频多一点,亮度收一收" },
+      { label: "更亮",           q: "整体更明亮,加点高频铃铛或亮的 lead" },
+      { label: "更狂躁",         q: "整体更狂躁,加密节奏 + 加 distort" },
+      { label: "更迷幻",         q: "整体更迷幻,大量 delay+phaser+room" },
+      { label: "更稳催眠",       q: "整体收一点,变得稳定催眠" },
+      { label: "工业冷酷",       q: "做工业冷酷感,金属感打击 + crush + 暗低音" },
+      { label: "复古温暖",       q: "做复古温暖感,加 saturation,LPF 收高频" },
+      { label: "太空空旷",       q: "做太空空旷感,巨大 reverb,稀疏 sub" },
+      { label: "紧张悬疑",       q: "做紧张悬疑感,小二度音程,持续 sub drone" },
+      { label: "梦幻浮空",       q: "做梦幻浮空感,长 pad + 钟琴,无强拍" },
+    ]},
+    { group: "节奏", chips: [
+      { label: "→ 4/4",          q: "改回标准 4/4" },
+      { label: "→ 3/4 华尔兹",   q: "改成 3/4 华尔兹律动" },
+      { label: "→ 5/4",          q: "改成 5/4 时值,Take Five 风格" },
+      { label: "→ 7/8",          q: "改成 7/8 律动" },
+      { label: "三连音 feel",    q: "整体改成三连音 feel(triplet)" },
+      { label: "shuffle",        q: "整体改成 shuffle/swing 律动" },
+    ]},
+    { group: "清理", chips: [
+      { label: "去掉最后一层",   q: "去掉最后加进来的那一层" },
+      { label: "去掉鼓",         q: "把鼓全部去掉,只留旋律和声部" },
+      { label: "去掉 pad",       q: "把 pad 去掉,让 mix 更紧" },
+      { label: "只留鼓 + bass",  q: "只留鼓和 bass,其他全去掉" },
+      { label: "只留 pad",       q: "只留空灵 pad,其他全去掉" },
+      { label: "渐渐收尾",       q: "渐渐收尾,声部一层层退出,最后只留 pad 衰减" },
+      { label: "完全重来",       q: "完全重来,起一段全新的 jam" },
+    ]},
+    { group: "可视化", chips: [
+      { label: "钢琴卷帘",      q: "在整体 stack(...) 末尾加 .pianoroll() 显示钢琴卷帘视图" },
+      { label: "垂直卷帘",      q: "在整体 stack(...) 末尾加 .pianoroll({ vertical: 1 }) 让钢琴卷帘竖向滚动" },
+      { label: "折叠卷帘",      q: "在整体 stack(...) 末尾加 .pianoroll({ fold: 1 }) 让所有音符折叠到同一八度" },
+      { label: "拖尾涂抹",      q: "在整体 stack(...) 末尾加 .pianoroll({ smear: 0.5 }) 让音符留下拖尾,有迷幻轨迹感" },
+      { label: "长卷历史",      q: "在整体 stack(...) 末尾加 .pianoroll({ cycles: 8 }) 一次显示 8 个 cycle 的历史" },
+      { label: "打孔卡(鼓)",    q: "给鼓声部加 .punchcard() 显示打孔卡视图,其它声部用 .pianoroll() 显示在整体末尾" },
+      { label: "音高轮",        q: "在整体 stack(...) 末尾加 .pitchwheel() 显示圆形音高轮" },
+      { label: "螺旋视图",      q: "在整体 stack(...) 末尾加 .spiral() 显示螺旋音符视图" },
+      { label: "字幕下落",      q: "在整体 stack(...) 末尾加 .wordfall() 显示音符标签下落动画" },
+      { label: "示波器",        q: "在整体 stack(...) 末尾加 .scope() 显示音频波形示波器" },
+      { label: "稳定示波器",    q: "在整体 stack(...) 末尾加 .scope({ trigger: 1, thickness: 3 }) 触发同步的示波器,波形不漂移" },
+      { label: "粗示波器",      q: "在整体 stack(...) 末尾加 .scope({ thickness: 5, scale: 0.7, color: 'cyan' }) 加粗的青色示波器" },
+      { label: "频谱拖尾",      q: "在整体 stack(...) 末尾加 .fscope({ smear: 0.5 }) 带拖尾的频谱视图" },
+      { label: "频谱",          q: "在整体 stack(...) 末尾加 .spectrum() 显示频谱分析" },
+      { label: "彩虹分轨",      q: "给整体 stack(...) 加 .color('<red orange yellow lime green cyan blue purple>').pianoroll(),让颜色随每个 cycle 循环切换 (彩虹效果)" },
+      { label: "节拍渐变色",    q: "给主旋律加 .color('red orange yellow lime green cyan blue magenta'),让每个事件颜色不同形成渐变,并在整体 stack(...) 末尾加 .pianoroll()" },
+      { label: "彩色分轨",      q: "给每个声部加 .color(...): 鼓 red, bass orange, pad cyan, lead yellow,并在整体 stack(...) 末尾加 .pianoroll() 才能在画面上看到颜色" },
+      { label: "全套可视化",    q: "鼓用 .punchcard().color('red'),其余声部用 .color(...) 标颜色,整体 stack(...) 末尾同时加 .pianoroll() 和 .scope() 让钢琴卷帘和示波器叠加显示" },
+      { label: "去掉可视化",    q: "移除所有 .pianoroll() / .punchcard() / .pitchwheel() / .spiral() / .wordfall() / .scope() / .spectrum() / .color() 调用" },
+    ]},
+  ];
+
+  function renderHints(){
+    const root = $("hints-body");
+    root.innerHTML = "";
+    for (const row of QUICK_CHIPS){
+      const r = document.createElement("div");
+      r.className = "quick-row";
+      const lab = document.createElement("span");
+      lab.className = "quick-label";
+      lab.textContent = row.group;
+      r.appendChild(lab);
+      for (const c of row.chips){
+        const b = document.createElement("button");
+        b.className = "chip";
+        b.textContent = c.label;
+        b.title = c.q;
+        b.addEventListener("click", ()=>{
+          promptEl.value = c.q;
+          closeHintsModal();
+          promptEl.focus();
+        });
+        r.appendChild(b);
+      }
+      root.appendChild(r);
+    }
+  }
+  renderHints();
+
+  function openHintsModal(){ $("hints-modal").style.display = "flex"; }
+  function closeHintsModal(){ $("hints-modal").style.display = "none"; }
+  $("hints-btn").addEventListener("click", openHintsModal);
+  $("hints-close").addEventListener("click", closeHintsModal);
+  // 点遮罩空白处也关
+  $("hints-modal").addEventListener("click", e=>{
+    if (e.target === $("hints-modal")) closeHintsModal();
+  });
+  // Esc 关闭任何打开的 modal
+  document.addEventListener("keydown", e=>{
+    if (e.key === "Escape"){
+      if ($("hints-modal").style.display !== "none") closeHintsModal();
+      else if ($("key-modal").style.display !== "none") closeKeyModal();
+    }
+  });
+  playBtn.addEventListener("click", async ()=>{
+    if (!state.code){ log("err","暂无模式可播放"); return; }
+    unlockAudioNow();
+    await evaluatePattern(state.code);
+  });
+  stopBtn.addEventListener("click", ()=>{
+    hushAll();
+    log("sys","HUSH · 已静音");
+  });
+  bpmInput.addEventListener("change", e=>setBpm(e.target.value));
+  bpmDown.addEventListener("click", ()=>setBpm(state.bpm - 1));
+  bpmUp.addEventListener("click", ()=>setBpm(state.bpm + 1));
+
+  // ---------- Editable code area (live) ----------
+  // pre 已设置 contenteditable=plaintext-only,这里负责状态同步 + RUN/COPY/快捷键
+  const dirtyBadge = $("dirty-badge");
+  function markDirty(on){
+    state.codeDirty = on;
+    dirtyBadge.style.display = on ? "" : "none";
+  }
+  // AUTO 自动评估开关
+  let autoEval = localStorage.getItem("vibestrudel.autoEval") !== "false";  // 默认开
+  function refreshAutoBtn(){
+    $("auto-btn").classList.toggle("auto-on", autoEval);
+    $("auto-btn").title = autoEval
+      ? "AUTO ON — 编辑后自动评估,下一个 cycle 生效。点击关闭"
+      : "AUTO OFF — 需要手动 RUN。点击开启";
+  }
+  refreshAutoBtn();
+  $("auto-btn").addEventListener("click", ()=>{
+    autoEval = !autoEval;
+    localStorage.setItem("vibestrudel.autoEval", autoEval ? "true" : "false");
+    refreshAutoBtn();
+    log("sys", "AUTO " + (autoEval ? "ON · 编辑会自动评估" : "OFF · 需手动 RUN"));
+  });
+
+  let autoTimer = null;
+  codeDisplay.addEventListener("input", ()=>{
+    state.code = codeDisplay.textContent;
+    markDirty(true);
+    if (autoEval){
+      clearTimeout(autoTimer);
+      autoTimer = setTimeout(()=>{
+        // 静默评估,失败时高亮错行,成功时不刷屏
+        unlockAudioNow();
+        evaluatePattern(state.code).then(()=>{
+          markDirty(false);
+        }).catch(()=>{ /* 已经在 evaluatePattern 里 log 过了 */ });
+      }, 500);
+    }
+  });
+  codeDisplay.addEventListener("blur", ()=>{
+    // 失焦时把纯文本重新着色(不影响光标 — blur 后光标自然消失)
+    if (state.code) setCode(state.code);
+  });
+  codeDisplay.addEventListener("keydown", e=>{
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter"){
+      e.preventDefault();
+      clearTimeout(autoTimer);
+      runEditedCode();
+    }
+  });
+  async function runEditedCode(){
+    if (!state.code){ log("err","暂无代码"); return; }
+    unlockAudioNow();
+    log("sys", state.codeDirty ? "执行编辑后的代码" : "重新执行当前代码");
+    markDirty(false);
+    try { await evaluatePattern(state.code); } catch(_){}
+  }
+  $("run-btn").addEventListener("click", runEditedCode);
+  $("copy-btn").addEventListener("click", async ()=>{
+    const btn = $("copy-btn");
+    try {
+      await navigator.clipboard.writeText(state.code || "");
+      const orig = btn.textContent;
+      btn.textContent = "✓ COPIED";
+      setTimeout(()=>{ btn.textContent = orig; }, 1200);
+    } catch(e){
+      log("err","复制失败: " + e.message);
+    }
+  });
+
+  // ---------- Presets ----------
+  const PRESETS = [
+    { name:"TECHNO 909", bpm:128, code:
+`setcpm(128/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.9),
+  s("~ cp ~ cp").bank("RolandTR909").gain(0.55).room(0.25),
+  s("hh*8").bank("RolandTR909").gain(0.32).pan(sine.range(-0.3,0.3).slow(4)),
+  s("~ ~ ~ oh").bank("RolandTR909").gain(0.4).room(0.2),
+  note("c2 c2 eb2 c2 c2 g1 c2 bb1").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.22).gain(0.78),
+  note("<c4 eb4 g4 bb4>").s("triangle").lpf(1500).attack(0.02).release(0.4).gain(0.42).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.3),
+  note("<c3 eb3 g3>/4").s("sawtooth").lpf(700).lpq(2).attack(1.2).release(3).gain(0.28).room(0.7)
+)` },
+    { name:"HOUSE", bpm:124, code:
+`setcpm(124/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.85),
+  s("~ cp ~ cp").bank("RolandTR909").gain(0.5).room(0.3),
+  s("~ hh ~ hh").bank("RolandTR909").gain(0.4),
+  s("~ ~ oh ~").bank("RolandTR909").gain(0.4).room(0.3),
+  note("a1 ~ a1 ~ e2 ~ d2 ~").s("sawtooth").lpf(500).lpq(6).attack(0.01).release(0.25).gain(0.72),
+  note("<[a3,c4,e4] [d4,f4,a4] [e4,g4,b4] [a3,c4,e4]>").s("triangle").lpf(1800).attack(0.04).release(0.5).gain(0.36).room(0.4)
+)` },
+    { name:"DEEP HOUSE", bpm:120, code:
+`setcpm(120/4)
+stack(
+  s("bd*4").gain(0.78).lpf(120),
+  s("~ rim ~ rim").bank("RolandTR909").gain(0.45).room(0.5),
+  s("hh*8").gain(0.28).pan(sine.range(-0.3,0.3).slow(8)),
+  note("<f2 eb2 ab2 bb2>").s("sawtooth").lpf(400).lpq(4).attack(0.01).release(0.3).gain(0.7),
+  note("<[f3,ab3,c4,eb4] [eb3,g3,bb3,d4] [ab3,c4,eb4,g4] [bb3,d4,f4,ab4]>/2").s("triangle").lpf(1600).attack(0.5).release(1.5).gain(0.32).room(0.6).delay(0.3).delaytime(0.5).delayfb(0.3)
+)` },
+    { name:"DRUM & BASS", bpm:174, code:
+`setcpm(174/4)
+stack(
+  s("bd ~ ~ bd ~ ~ bd ~").gain(0.85),
+  s("~ ~ sd ~ ~ ~ sd ~").gain(0.7).room(0.25),
+  s("hh*16").gain(0.22).pan(sine.range(-0.4,0.4).slow(2)),
+  s("~ ~ ~ ~ ~ oh ~ ~").bank("RolandTR909").gain(0.35),
+  note("<a1 a1 e2 d2>").s("sawtooth").lpf(280).lpq(8).attack(0.005).release(0.35).gain(0.82),
+  note("<[a3,c4,e4] [e3,g3,b3] [d3,f3,a3] [g3,b3,d4]>/2").s("triangle").lpf(1400).attack(0.04).release(0.4).gain(0.32).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.4)
+)` },
+    { name:"LO-FI HOP", bpm:88, code:
+`setcpm(88/4)
+stack(
+  s("bd ~ ~ bd ~ ~ ~ bd").bank("RolandTR808").gain(0.78).lpf(160),
+  s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR808").gain(0.55).room(0.45),
+  s("hh*8").gain(0.24).speed(0.95).pan(sine.range(-0.2,0.2).slow(4)),
+  note("<c2 c2 g1 ab1>").s("sine").gain(0.7).attack(0.01).release(0.45).lpf(220),
+  note("<[c4,eb4,g4,bb4] [d4,f4,ab4,c5] [bb3,d4,f4,ab4] [c4,eb4,g4,bb4]>/2").s("triangle").lpf(1400).attack(0.1).release(0.7).gain(0.32).room(0.5).delay(0.25).delaytime(0.5)
+)` },
+    { name:"AMBIENT", bpm:60, code:
+`setcpm(60/4)
+stack(
+  note("<c3 eb3 g3 bb3>/4").s("sawtooth").lpf(500).lpq(2).attack(2).release(4).gain(0.3).room(0.85),
+  note("<g4 ~ bb4 ~ eb5 ~ d5 ~>/2").s("sine").gain(0.25).attack(1.5).release(3).delay(0.6).delaytime(0.75).delayfb(0.5).room(0.8),
+  note("<[c4,g4] [eb4,bb4] [g4,d5] [bb4,f5]>/4").s("triangle").lpf(900).attack(2).release(4).gain(0.2).room(0.85),
+  s("~ ~ ~ rim").bank("RolandTR909").gain(0.18).room(0.85).delay(0.5).delaytime(0.75)
+)` },
+    { name:"TRAP", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd ~ ~ ~ ~ ~ bd ~").bank("RolandTR808").gain(0.95),
+  s("~ ~ ~ ~ sd ~ ~ ~").bank("RolandTR808").gain(0.7).room(0.3),
+  s("hh*8").bank("RolandTR808").gain(0.3),
+  s("~ ~ ~ ~ ~ ~ ~ <hh*2 hh*4 hh*3 hh*6>").bank("RolandTR808").gain(0.32),
+  note("c1 ~ ~ ~ ~ ~ g1 ~").s("sine").gain(0.92).attack(0.01).release(0.6).lpf(140),
+  note("<eb4 ~ g4 ~ bb4 ~ c5 ~>").s("triangle").lpf(1600).attack(0.04).release(0.4).gain(0.32).delay(0.45).delaytime(0.375).delayfb(0.45).room(0.4)
+)` },
+    { name:"ACID 303", bpm:130, code:
+`setcpm(130/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.9),
+  s("~ cp ~ cp").bank("RolandTR909").gain(0.5),
+  s("hh*8").bank("RolandTR909").gain(0.3),
+  note("c2 c3 c2 eb2 c2 g2 c2 bb1").s("sawtooth")
+    .lpf(sine.range(300, 1800).slow(4)).lpq(15)
+    .attack(0.005).release(0.15).gain(0.68)
+)` },
+    { name:"DUB TECHNO", bpm:122, code:
+`setcpm(122/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").gain(0.78),
+  s("~ ~ rim ~").bank("RolandTR909").gain(0.4).room(0.7).delay(0.6).delaytime(0.5).delayfb(0.45),
+  s("~ hh ~ hh").gain(0.28),
+  note("<a1 a1 e2 d2>").s("sawtooth").lpf(240).lpq(4).attack(0.02).release(0.4).gain(0.7),
+  note("<[a3,c4,e4] ~ ~ [g3,b3,d4]>").s("triangle").lpf(900).lpq(2).attack(0.1).release(0.8).gain(0.32).room(0.85).delay(0.65).delaytime(0.75).delayfb(0.55)
+)` },
+    { name:"MINIMAL", bpm:126, code:
+`setcpm(126/4)
+stack(
+  s("bd*4").gain(0.82),
+  s("~ ~ rim ~").bank("RolandTR909").gain(0.5).room(0.4),
+  s("~ ~ ~ hh ~ ~ hh ~").gain(0.3),
+  s("~ ~ ~ ~ ~ ~ cb ~").gain(0.22).room(0.5).delay(0.4),
+  note("<c2 ~ eb2 ~>").s("square").lpf(380).lpq(6).attack(0.005).release(0.18).gain(0.55),
+  note("<g4 ~ ~ ~ bb4 ~ ~ ~>").s("triangle").lpf(1600).attack(0.02).release(0.3).gain(0.3).delay(0.5).delaytime(0.375).delayfb(0.4)
+)` },
+    { name:"BREAKBEAT", bpm:135, code:
+`setcpm(135/4)
+stack(
+  s("bd ~ ~ bd ~ bd ~ ~").gain(0.85),
+  s("~ ~ sd ~ ~ ~ sd ~").gain(0.7).room(0.3),
+  s("hh*8").gain(0.3),
+  s("~ ~ ~ ~ ~ oh ~ ~").bank("RolandTR909").gain(0.4),
+  note("e2 e2 g2 e2 d2 e2 a1 b1").s("sawtooth").lpf(550).lpq(6).attack(0.01).release(0.2).gain(0.72),
+  note("<e3 g3 b3 a3>").s("triangle").lpf(1600).attack(0.03).release(0.4).gain(0.35).room(0.4).delay(0.3)
+)` },
+    { name:"UK GARAGE", bpm:135, code:
+`setcpm(135/4)
+stack(
+  s("bd ~ ~ ~ ~ ~ bd ~").gain(0.85),
+  s("~ ~ sd ~ ~ sd ~ ~").gain(0.65).room(0.3),
+  s("hh ~ hh hh ~ hh hh ~").gain(0.32),
+  s("~ ~ ~ ~ ~ ~ ~ oh").bank("RolandTR909").gain(0.4),
+  note("<g1 g1 d2 c2>").s("sawtooth").lpf(320).lpq(6).attack(0.01).release(0.3).gain(0.78),
+  note("<[g3,bb3,d4] [eb3,g3,bb3] [c3,eb3,g3] [d3,f3,a3]>/2").s("triangle").lpf(2000).attack(0.04).release(0.5).gain(0.3).room(0.5).delay(0.4)
+)` },
+    { name:"SYNTHWAVE", bpm:110, code:
+`setcpm(110/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").bank("RolandTR909").gain(0.85),
+  s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR909").gain(0.7).room(0.6).delay(0.3).delaytime(0.375),
+  s("hh*8").bank("RolandTR909").gain(0.32),
+  note("<a2 a2 f2 g2>*4").s("sawtooth").lpf(1100).lpq(4).attack(0.005).release(0.15).gain(0.55),
+  note("<a4 e5 c5 b4 a4 e5 g5 a5>").s("square").lpf(2200).attack(0.01).release(0.3).gain(0.4).delay(0.5).delaytime(0.375).delayfb(0.45),
+  note("<[a3,c4,e4] [f3,a3,c4] [g3,b3,d4] [a3,c4,e4]>/2").s("triangle").lpf(1500).attack(0.5).release(2).gain(0.3).room(0.5)
+)` },
+    { name:"IDM GLITCH", bpm:110, code:
+`setcpm(110/4)
+stack(
+  s("bd*<1 2 1 4>").gain(0.78).sometimes(x=>x.crush(6)),
+  s("<~ sd ~ ~> <~ ~ sd*2 ~>").gain(0.6).room(0.3).sometimes(x=>x.rev()),
+  s("hh*<8 16 4 12>").gain(0.26).pan(rand.range(-0.5,0.5)),
+  note("<c2 ~ eb2 g1 ~ bb1 c2 ~>").s("square").lpf(rand.range(400, 1200)).lpq(6).attack(0.005).release(0.15).gain(0.55).sometimes(x=>x.crush(4)),
+  note("<e4 ~ g4 ~ a4 ~ c5 ~>*2").s("triangle").lpf(1900).attack(0.02).release(0.3).gain(0.32).delay(0.5).delaytime(0.333).delayfb(0.5).every(3, x=>x.rev())
+)` },
+    { name:"AFROBEAT", bpm:108, code:
+`setcpm(108/4)
+stack(
+  s("bd ~ ~ bd ~ ~ bd ~").gain(0.78),
+  s("~ ~ ~ ~ rim rim ~ rim").bank("RolandTR909").gain(0.45).room(0.3),
+  s("hh*8").gain(0.28),
+  s("~ cb ~ ~ cb ~ cb ~").gain(0.32),
+  s("~ lt ~ mt ~ ht ~ lt").gain(0.4).room(0.25),
+  note("<a1 a1 e2 d2 a1 g2 e2 a1>").s("sawtooth").lpf(450).lpq(6).attack(0.01).release(0.22).gain(0.7),
+  note("<[a3,c4,e4] [d4,f4,a4] [g3,b3,d4] [a3,c4,e4]>/2").s("triangle").lpf(1800).attack(0.04).release(0.5).gain(0.3).room(0.4)
+)` },
+    { name:"PSYTRANCE", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd*4").gain(0.92),
+  s("~ ~ ~ ~ ~ cp ~ ~").gain(0.45).room(0.3),
+  s("hh*16").gain(0.22).pan(sine.range(-0.4,0.4).fast(2)),
+  s("~ oh ~ oh ~ oh ~ oh").bank("RolandTR909").gain(0.3),
+  note("e1*8").s("sawtooth").lpf(sine.range(300,1600).slow(8)).lpq(10).attack(0.005).release(0.08).gain(0.62).struct("0 1 1 1 0 1 1 1"),
+  note("<e3 g3 b3 a3 e3 g3 c4 b3>*2").s("triangle").lpf(1800).attack(0.02).release(0.2).gain(0.32).delay(0.4).delaytime(0.375).delayfb(0.5)
+)` },
+    { name:"JAZZ TRIO", bpm:90, code:
+`setcpm(90/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").gain(0.5).lpf(150),
+  s("~ ~ rim ~ ~ ~ rim ~").bank("RolandTR909").gain(0.55).room(0.4),
+  s("hh ~ hh ~ hh hh ~ hh").gain(0.3),
+  note("<a2 d3 g2 c3 f2 b2 e2 a2>").s("triangle").lpf(900).attack(0.02).release(0.45).gain(0.55),
+  note("<[a3,c4,e4,g4] [d4,f4,a4,c5] [g3,b3,d4,f4] [c4,e4,g4,b4]>/2").s("triangle").lpf(2200).attack(0.08).release(1).gain(0.38).room(0.5)
+)` },
+    { name:"PHONK", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd ~ ~ bd ~ bd ~ ~").bank("RolandTR808").gain(0.95).distort(0.35),
+  s("~ ~ ~ ~ sd ~ ~ ~").bank("RolandTR808").gain(0.65).room(0.3),
+  s("hh*8").bank("RolandTR808").gain(0.32),
+  s("cb ~ ~ cb ~ ~ cb ~").gain(0.45).room(0.4),
+  note("c1 ~ ~ eb1 ~ g1 ~ ~").s("sine").gain(0.92).attack(0.01).release(0.5).lpf(190),
+  note("<eb4 ~ ~ g4 ~ bb4 ~ ~>").s("triangle").lpf(1600).attack(0.02).release(0.3).gain(0.3).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.4)
+)` },
+    { name:"HARDCORE", bpm:160, code:
+`setcpm(160/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.95).distort(0.5).shape(0.3),
+  s("~ ~ sd ~").bank("RolandTR909").gain(0.7).distort(0.25),
+  s("hh*16").bank("RolandTR909").gain(0.26).pan(sine.range(-0.3,0.3).fast(2)),
+  s("~ ~ ~ oh ~ ~ oh ~").bank("RolandTR909").gain(0.4),
+  note("c2*8").s("sawtooth").lpf(450).lpq(10).attack(0.005).release(0.07).gain(0.66).struct("1 0 1 1 1 0 1 1"),
+  note("<eb4 g4 bb4 c5>*2").s("square").lpf(2200).attack(0.01).release(0.2).gain(0.4).delay(0.3).delaytime(0.375)
+)` },
+    { name:"AMAPIANO", bpm:110, code:
+`setcpm(110/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").gain(0.85),
+  s("~ ~ rim ~ ~ ~ rim ~").bank("RolandTR909").gain(0.5).room(0.4),
+  s("hh*8").gain(0.3).pan(sine.range(-0.3,0.3).slow(4)),
+  s("~ ~ ~ <~ cp> ~ ~ ~ <cp ~>").gain(0.42).room(0.3),
+  note("<a1 a1 e2 d2>").s("sine").lpf(220).attack(0.01).release(0.45).gain(0.85),
+  note("<[a3,c4,e4,g4] [d4,f4,a4,c5] [g3,b3,d4,f4] [c4,e4,g4,b4]>/2").s("triangle").lpf(2000).attack(0.05).release(1).gain(0.4).room(0.5),
+  note("<a4 ~ c5 ~ e5 ~ d5 ~>*2").s("triangle").lpf(2500).attack(0.01).release(0.25).gain(0.32).delay(0.4).delaytime(0.375)
+)` },
+    { name:"FUTURE BASS", bpm:150, code:
+`setcpm(150/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").gain(0.85),
+  s("~ ~ sd ~ ~ ~ sd ~").gain(0.7).room(0.4),
+  s("hh*8").gain(0.3),
+  note("c2 ~ c2 ~ eb2 ~ c2 ~").s("sine").lpf(180).attack(0.01).release(0.4).gain(0.9),
+  note("<[c4,eb4,g4,bb4] [d4,f4,ab4,c5] [bb3,d4,f4,ab4] [c4,eb4,g4,bb4]>/2").s("sawtooth").lpf(sine.range(800,2400).slow(4)).lpq(4).attack(0.05).release(0.6).gain(0.36).room(0.4),
+  note("<eb5 ~ g5 bb5 ~ c6 ~ d6>").s("triangle").lpf(2800).attack(0.01).release(0.2).gain(0.32).delay(0.4).delaytime(0.375).delayfb(0.5)
+)` },
+    { name:"BOOM BAP", bpm:90, code:
+`setcpm(90/4)
+stack(
+  s("bd ~ ~ bd ~ ~ ~ ~").bank("RolandTR808").gain(0.82).lpf(180),
+  s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR808").gain(0.72).room(0.4),
+  s("hh*8").gain(0.32).speed(0.9),
+  s("~ ~ ~ ~ ~ ~ ~ <~ oh>").bank("RolandTR909").gain(0.35),
+  note("<a1 a1 d2 g1 a1 c2 a1 d2>").s("sine").lpf(250).attack(0.01).release(0.45).gain(0.7),
+  note("<[a3,c4,e4] [d4,f4,a4] [g3,b3,d4] [a3,c4,e4]>/2").s("triangle").lpf(1600).attack(0.08).release(0.6).gain(0.32).room(0.45)
+)` },
+    { name:"DRILL", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd ~ ~ ~ ~ bd ~ ~").bank("RolandTR808").gain(0.92),
+  s("~ ~ ~ ~ sd ~ ~ ~").bank("RolandTR808").gain(0.7).room(0.3),
+  s("hh*8").bank("RolandTR808").gain(0.3),
+  s("~ ~ ~ ~ ~ ~ ~ <hh*3 hh*5 hh*2 hh*4>").bank("RolandTR808").gain(0.32),
+  note("<g1 [g1 a1] f1 [f1 g1]>").s("sine").lpf(160).lpq(4).attack(0.005).release(0.4).gain(0.92),
+  note("<eb4 g4 ~ bb4 c5 ~ ~ d4>").s("triangle").lpf(1500).attack(0.02).release(0.3).gain(0.32).delay(0.45).delaytime(0.375).delayfb(0.45)
+)` },
+    { name:"INDUSTRIAL", bpm:130, code:
+`setcpm(130/4)
+stack(
+  s("bd ~ bd ~ bd ~ bd ~").gain(0.9).distort(0.4),
+  s("~ ~ rim*2 ~").bank("RolandTR909").gain(0.55).crush(8).room(0.4),
+  s("hh*16").gain(0.24).crush(6),
+  s("~ ~ ~ ~ ~ ~ <mt*2 ~> ~").gain(0.4).distort(0.3),
+  note("c2*4").s("square").lpf(280).lpq(8).attack(0.005).release(0.18).gain(0.7).distort(0.3),
+  note("<[c3,eb3,g3] ~ ~ [bb2,d3,f3]>/2").s("sawtooth").lpf(700).attack(0.05).release(0.5).gain(0.3).room(0.5).crush(10)
+)` },
+    { name:"JERSEY CLUB", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd*5").bank("RolandTR808").gain(0.9).struct("1 0 1 1 1"),
+  s("~ ~ ~ <sd ~> ~").bank("RolandTR808").gain(0.65).room(0.3),
+  s("hh*8").bank("RolandTR808").gain(0.3),
+  s("~ ~ ~ ~ <bd*2 bd*3 bd ~> ~ ~ ~").bank("RolandTR808").gain(0.7),
+  note("<c2 c2 eb2 g1>").s("sine").lpf(160).attack(0.01).release(0.35).gain(0.85),
+  note("<[c4,eb4,g4] [bb3,d4,f4] [g3,bb3,d4] [c4,eb4,g4]>/2").s("triangle").lpf(2000).attack(0.04).release(0.5).gain(0.32).room(0.4)
+)` },
+    { name:"CHILLWAVE", bpm:95, code:
+`setcpm(95/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").bank("RolandTR909").gain(0.7).lpf(180),
+  s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR909").gain(0.55).room(0.6).delay(0.3),
+  s("hh*8").gain(0.25),
+  note("<a2 a2 f2 e2>").s("sawtooth").lpf(380).lpq(4).attack(0.01).release(0.35).gain(0.7),
+  note("<a4 c5 e5 d5 a4 c5 g5 a5>").s("triangle").lpf(1800).attack(0.05).release(0.5).gain(0.35).delay(0.5).delaytime(0.5).delayfb(0.4),
+  note("<[a3,c4,e4] [f3,a3,c4] [g3,b3,d4] [a3,c4,e4]>/4").s("sawtooth").lpf(900).lpq(2).attack(1.5).release(3).gain(0.3).room(0.7)
+)` },
+    { name:"RIDDIM", bpm:140, code:
+`setcpm(140/4)
+stack(
+  s("bd ~ ~ ~ ~ ~ ~ ~").gain(0.92),
+  s("~ ~ ~ ~ sd ~ ~ ~").gain(0.78).room(0.35),
+  s("hh*8").gain(0.28),
+  s("~ ~ ~ ~ ~ ~ <~ rim> ~").bank("RolandTR909").gain(0.4),
+  note("c2 ~ ~ ~ ~ eb2 c2 ~").s("sawtooth").lpf(sine.range(200,1400).fast(4)).lpq(15).attack(0.005).release(0.2).gain(0.7).distort(0.45),
+  note("<[c3,eb3,g3] ~ ~ ~>").s("triangle").lpf(1500).attack(0.05).release(0.6).gain(0.3).room(0.4)
+)` },
+    { name:"TRIBAL HOUSE", bpm:124, code:
+`setcpm(124/4)
+stack(
+  s("bd*4").gain(0.85),
+  s("~ ~ rim ~ ~ rim ~ rim").bank("RolandTR909").gain(0.5).room(0.3),
+  s("hh*8").gain(0.32),
+  s("lt mt ht ~ lt lt mt ~").gain(0.45).room(0.3),
+  s("~ cb ~ cb ~ cb ~ ~").gain(0.4),
+  note("<a1 a1 e2 d2>").s("sawtooth").lpf(420).lpq(6).attack(0.01).release(0.25).gain(0.72),
+  note("<[a3,c4,e4] [g3,b3,d4]>/2").s("triangle").lpf(1800).attack(0.05).release(0.6).gain(0.32).room(0.4)
+)` },
+    { name:"TECH HOUSE", bpm:125, code:
+`setcpm(125/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(0.88),
+  s("~ cp ~ cp").bank("RolandTR909").gain(0.5).room(0.25),
+  s("~ hh ~ hh ~ hh ~ hh").bank("RolandTR909").gain(0.32),
+  s("~ ~ oh ~ ~ ~ oh ~").bank("RolandTR909").gain(0.38),
+  s("~ ~ ~ ~ ~ ~ ~ rim").bank("RolandTR909").gain(0.4).room(0.4),
+  note("a1 ~ a1 a1 e2 ~ d2 ~").s("sawtooth").lpf(420).lpq(8).attack(0.01).release(0.2).gain(0.78),
+  note("<a3 c4 e4 g4>*2").s("triangle").lpf(2000).attack(0.02).release(0.3).gain(0.32).delay(0.3).delaytime(0.375).delayfb(0.3)
+)` },
+    { name:"HARDSTYLE", bpm:150, code:
+`setcpm(150/4)
+stack(
+  s("bd*4").gain(0.95).distort(0.5),
+  s("~ ~ sd ~").gain(0.7).room(0.3),
+  s("hh*8").gain(0.3),
+  note("c1*<1 1 1 2>").s("square").lpf(180).lpq(8).attack(0.005).release(0.4).gain(0.85),
+  note("<eb3 g3 bb3 c4 ~ d4 g3 bb3>*2").s("sawtooth").lpf(2200).lpq(8).attack(0.005).release(0.18).gain(0.42).distort(0.3).delay(0.3).delaytime(0.375)
+)` },
+    { name:"FUTURE GARAGE", bpm:130, code:
+`setcpm(130/4)
+stack(
+  s("bd ~ ~ ~ ~ ~ bd ~").gain(0.78),
+  s("~ ~ sd ~ ~ sd ~ ~").gain(0.55).room(0.5).delay(0.3),
+  s("hh ~ hh hh ~ hh ~ hh").gain(0.3),
+  s("~ ~ ~ ~ ~ ~ ~ <oh ~>").bank("RolandTR909").gain(0.32),
+  note("<g1 g1 d2 c2>").s("sine").lpf(220).attack(0.02).release(0.4).gain(0.85),
+  note("<[g3,bb3,d4] [c3,eb3,g3] [eb3,g3,bb3] [d3,f3,a3]>/4").s("triangle").lpf(900).attack(1).release(2.5).gain(0.32).room(0.75),
+  note("<bb4 ~ d5 ~ ~ c5 ~ ~>").s("sine").gain(0.28).attack(0.05).release(0.6).delay(0.6).delaytime(0.75).delayfb(0.5).room(0.6)
+)` },
+    { name:"VAPORWAVE", bpm:60, code:
+`setcpm(60/4)
+stack(
+  s("bd ~ ~ ~ bd ~ ~ ~").bank("RolandTR808").gain(0.6).lpf(180),
+  s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR808").gain(0.5).room(0.6).delay(0.4),
+  s("hh ~ ~ hh ~ ~ hh ~").gain(0.22).speed(0.9),
+  note("<f3 ab3 c4 eb4>/2").s("sine").gain(0.45).attack(0.5).release(2).delay(0.5).delaytime(0.5).delayfb(0.5).room(0.7),
+  note("<[f3,ab3,c4] [g3,bb3,d4] [eb3,g3,bb3] [ab3,c4,eb4]>/4").s("triangle").lpf(1500).attack(1.5).release(3).gain(0.32).room(0.7)
+)` },
+  ];
+
+  // 给内置 PRESETS 打上 source 标记
+  PRESETS.forEach(p => { if (!p.source) p.source = "builtin"; });
+
+  let activePresetTab = "all";
+
+  function renderPresets(){
+    const grid = $("preset-grid");
+    grid.innerHTML = "";
+    PRESETS.forEach((p, i) => {
+      const pad = document.createElement("button");
+      pad.className = "preset-pad";
+      pad.dataset.idx = i;
+      pad.dataset.source = p.source;
+      const showSrc = p.source === "community" ? `<span class="pad-source">SC</span>` : "";
+      pad.innerHTML =
+        `<span class="pad-num">${String(i+1).padStart(2,"0")}</span>`+
+        `<span class="pad-name"></span>`+
+        `<span class="pad-play">▶</span>`+
+        `<span class="pad-bpm"></span>`+
+        showSrc;
+      pad.querySelector(".pad-name").textContent = p.name;
+      pad.querySelector(".pad-bpm").textContent = p.bpm + " BPM";
+      pad.addEventListener("click", () => loadPreset(i));
+      grid.appendChild(pad);
+    });
+    applyPresetTabFilter();
+    updateTabCounts();
+  }
+
+  function updateTabCounts(){
+    const all = PRESETS.length;
+    const bi  = PRESETS.filter(p=>p.source==="builtin").length;
+    const co  = PRESETS.filter(p=>p.source==="community").length;
+    $("count-all").textContent       = all;
+    $("count-builtin").textContent   = bi;
+    $("count-community").textContent = co;
+  }
+
+  function applyPresetTabFilter(){
+    document.querySelectorAll(".preset-pad").forEach(el=>{
+      el.style.display = (activePresetTab === "all" || el.dataset.source === activePresetTab) ? "" : "none";
+    });
+  }
+
+  document.querySelectorAll("#preset-tabs .preset-tab").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      document.querySelectorAll("#preset-tabs .preset-tab").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      activePresetTab = b.dataset.source;
+      applyPresetTabFilter();
+    });
+  });
+
+  // 抽屉折叠
+  const presetRack = document.querySelector(".preset-rack");
+  const PRESET_COLLAPSED_LS = "vibestrudel.presetCollapsed";
+  if (localStorage.getItem(PRESET_COLLAPSED_LS) === "true"){
+    presetRack.classList.add("collapsed");
+  }
+  $("preset-head").addEventListener("click", ()=>{
+    const willCollapse = !presetRack.classList.contains("collapsed");
+    presetRack.classList.toggle("collapsed", willCollapse);
+    localStorage.setItem(PRESET_COLLAPSED_LS, willCollapse ? "true" : "false");
+  });
+
+  async function loadPreset(idx){
+    const p = PRESETS[idx];
+    if (!p) return;
+    unlockAudioNow();
+    const srcTag = p.source === "community" ? " [SC]" : "";
+    log("sys", `载入预设 #${String(idx+1).padStart(2,"0")}${srcTag} · ${p.name} · ${p.bpm} BPM`);
+    state.history = [];
+    setBpm(p.bpm);
+    setCode(p.code);
+    document.querySelectorAll(".preset-pad").forEach(el => {
+      el.classList.toggle("active", +el.dataset.idx === idx);
+    });
+    try {
+      await evaluatePattern(p.code);
+    } catch(_){}
+  }
+
+  // 异步加载社区包,合并后重渲染
+  async function loadCommunityPresets(){
+    try {
+      const res = await fetch("./vendor/presets/community.json");
+      const data = await res.json();
+      const tunes = data.tunes || [];
+      tunes.forEach(t => PRESETS.push({ name: t.name, bpm: t.bpm, code: t.code, source: "community" }));
+      log("sys", `已加载社区预设 ${tunes.length} 个 (源: ${data._source || "?"})`);
+      renderPresets();
+    } catch(e){
+      log("err","社区预设加载失败: " + e.message);
+    }
+  }
+
+  renderPresets();
+  loadCommunityPresets();
+
+  // ---------- Strudel sample loading status ----------
+  window.addEventListener("strudel:samples-loading", e=>{
+    const p = e.detail?.pref || "auto";
+    log("sys",`正在加载样本... (模式: ${p})`);
+  });
+  window.addEventListener("strudel:samples-loaded",  e=>{
+    const d = e.detail || {};
+    log("sys",`样本就绪 · 引擎(${d.engine || "?"}) · 包: ${d.name || "?"}`);
+    if (d.failed?.length) log("err","下列源失败: " + d.failed.join(", "));
+  });
+  window.addEventListener("strudel:samples-error",   e=>{
+    log("err","样本加载失败: " + (e.detail?.message || e.detail));
+    log("err","可在 API KEY 设置里切换'样本源'。Auto/本地/远程 三档。");
+    setLed(ledErr,true);
+  });
+  window.addEventListener("strudel:visual-status", e=>{
+    if (e.detail?.ok) log("sys","✓ 视觉模块就绪 · 用 .pianoroll() / .punchcard() 显示");
+    else log("sys","✗ 视觉不可用(本地引擎无 @strudel/draw)。在 API KEY 把'样本源'设为 AUTO 或 远程 即可启用。");
+  });
+
+  // ---------- Boot ----------
+  updateModelBadge();
+  log("sys","系统就绪 · 选预设或输入指令开始演奏");
+  if (!llmCurrentKey()){
+    log("sys","首次使用：请先在右上角 API KEY 中设置 LLM");
+    openKeyModal();
+  } else {
+    log("sys", `已检测到 ${llm.provider.toUpperCase()} API Key`);
+  }
+
+  // unlock audio on first interaction
+  document.addEventListener("click", ()=>{
+    if (window.AudioContext || window.webkitAudioContext){
+      try {
+        if (window.getAudioContext){ window.getAudioContext().resume(); }
+      } catch(_){}
+    }
+  }, { once:true });
+})();
+</script>
+</body>
+</html>

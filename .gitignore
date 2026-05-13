@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# claude-code session state
+.claude/
+
+# node deps from build script
+vendor/strudel-build/node_modules/
+vendor/strudel-build/package-lock.json
+
+# 大体积样本 WAV/MP3 — 不进 git, clone 后跑 setup.sh 拉取
+vendor/samples/dirt-samples/*/
+vendor/samples/tidal-drum-machines/
+vendor/samples/piano/
+vendor/samples/VCSL/
+
+# 但保留 manifest .json
+!vendor/samples/dirt-samples/strudel.json
+
+# 调试 / 临时
+vendor/esmsh/
