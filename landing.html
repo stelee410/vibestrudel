@@ -588,9 +588,9 @@
       const res = await fetch("/sessions", { method: "POST" });
       if (!res.ok) throw new Error("server returned " + res.status);
       const { id } = await res.json();
-      const url = `${location.origin}/s/${id}`;
+      const url = `${location.origin}/app/${id}`;
       urlInput.value = url;
-      enterLnk.href = `/s/${id}`;
+      enterLnk.href = `/app/${id}`;
       card.classList.add("show");
       btn.classList.remove("loading");
       btn.querySelector(".text").textContent = "CREATE ANOTHER · 再开一个";

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="./themes/default.css" />
+<link rel="stylesheet" href="/themes/default.css" />
 </head>
 <body>
 
@@ -222,13 +222,13 @@
 <script type="module">
   // 每个 manifest 都有 local 和 remote 两套源,按用户偏好选择
   const SAMPLE_MANIFESTS = [
-    { name: "dirt-samples",        local: "./vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
-    { name: "tidal-drum-machines", local: "./vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
-    { name: "piano",               local: "./vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
-    { name: "vcsl",                local: "./vendor/samples/vcsl.json",                 remote: "https://strudel.b-cdn.net/vcsl.json" },
+    { name: "dirt-samples",        local: "/vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
+    { name: "tidal-drum-machines", local: "/vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
+    { name: "piano",               local: "/vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
+    { name: "vcsl",                local: "/vendor/samples/vcsl.json",                 remote: "https://strudel.b-cdn.net/vcsl.json" },
   ];
   // 本地 bundle 已经把 @strudel/draw 一起打包,视觉链式方法 (.pianoroll/.scope 等) 全部可用
-  const ENGINE_LOCAL  = "./vendor/strudel/index.mjs";
+  const ENGINE_LOCAL  = "/vendor/strudel/index.mjs";
   const ENGINE_REMOTE = "https://esm.sh/@strudel/web@1.3.0";
 
   // 读偏好: "auto"(默认) | "local" | "remote"
@@ -1828,7 +1828,7 @@ stack(
   // 异步加载社区包,合并后重渲染
   async function loadCommunityPresets(){
     try {
-      const res = await fetch("./vendor/presets/community.json");
+      const res = await fetch("/vendor/presets/community.json");
       const data = await res.json();
       const tunes = data.tunes || [];
       tunes.forEach(t => PRESETS.push({ name: t.name, bpm: t.bpm, code: t.code, source: "community" }));
