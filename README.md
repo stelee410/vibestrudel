@@ -37,6 +37,28 @@ python3 -m http.server 4173
 
 打开 `http://localhost:4173`。
 
+### Live (多人协作云端) 模式
+
+如果想架自己的 live server,见 [`DEVELOPMENT-LIVE.md`](DEVELOPMENT-LIVE.md):
+
+```bash
+cp .env.example .env
+# 填 GEMINI_API_KEY
+
+# 准备 public/(静态文件给 Caddy)
+mkdir -p public
+cp landing.html index.html public/
+cp -r themes vendor public/
+
+# 起整套(redis + node 服务端 + caddy)
+docker compose up -d --build
+```
+
+页面路由:
+- `/` — 炫酷 landing 页
+- `/app` — 单机模式(现有客户端)
+- `/s/<id>` — Live 协作模式
+
 ### 3. 在右上角 `API KEY` 填入 LLM 凭证
 
 第一次会弹出设置框。Key 保存在浏览器 localStorage,不会上传。

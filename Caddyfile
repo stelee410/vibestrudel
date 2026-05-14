@@ -1,47 +1,70 @@
-live.linkyun.co {
-    # API 请求转发到 app 容器
-    @api {
-        path /sessions
-        path /sessions/*
-        path /s/*
-        path /healthz
-        path /stats
-    }
-    handle @api {
-        reverse_proxy app:8080
-    }
+# =====================================================
+# VibeStrudel Live · Caddy 反向代理
+#
+# 路由规则:
+#   /                    → landing.html (酷炫首页)
+#   /app                 → index.html (单机模式)
+#   /sessions (POST)     → app:8080 (创建 session)
+#   /healthz, /stats     → app:8080
+#   /s/:id (POST .../code|vibe) → app:8080
+#   /s/:id (GET, browser navigation) → index.html (live 客户端)
+#   /s/:id (GET, fetch with Accept: application/json) → app:8080 (poll API)
+#   其它 (themes/, vendor/, landing.html 等) → 静态文件
+# =====================================================
 
-    # 静态资源(index.html / themes / vendor)
-    handle {
-        root * /srv/public
-        try_files {path} /index.html
+(common) {
+    root * /srv/public
+
+    # === 纯 API 端点(永远转发到 app) ===
+    handle /sessions { reverse_proxy app:8080 }
+    handle /healthz  { reverse_proxy app:8080 }
+    handle /stats    { reverse_proxy app:8080 }
+
+    # === /s/:id/code 和 /s/:id/vibe — 永远是 API ===
+    @session_action path_regexp ^/s/[a-zA-Z0-9_-]+/(code|vibe)$
+    handle @session_action { reverse_proxy app:8080 }
+
+    # === /s/:id — 区分浏览器 vs fetch ===
+    # 浏览器导航 (Accept 含 text/html) → 返回 index.html (live 客户端 SPA)
+    @session_html {
+        path_regexp session_html ^/s/[a-zA-Z0-9_-]+$
+        header Accept *text/html*
+    }
+    handle @session_html {
+        rewrite * /index.html
         file_server
+    }
+    # 其它(fetch 带 Accept: application/json) → 转发到 app
+    @session_api path_regexp session_api ^/s/[a-zA-Z0-9_-]+$
+    handle @session_api { reverse_proxy app:8080 }
 
-        # 长缓存静态资源
+    # === 应用页面 ===
+    handle / {
+        rewrite * /landing.html
+        file_server
+    }
+    handle /app {
+        rewrite * /index.html
+        file_server
+    }
+
+    # === 静态资源 (themes/*, vendor/*, *.css, *.js, *.svg, etc.) ===
+    handle {
+        file_server
         @assets path /vendor/* /themes/*
         header @assets Cache-Control "public, max-age=31536000, immutable"
     }
 
     encode gzip zstd
+}
+
+# 生产域名
+live.linkyun.co {
+    import common
     log
 }
 
-# 本地测试 / 没域名时用 :80
+# 本地测试(无域名)
 :80 {
-    @api {
-        path /sessions
-        path /sessions/*
-        path /s/*
-        path /healthz
-        path /stats
-    }
-    handle @api {
-        reverse_proxy app:8080
-    }
-    handle {
-        root * /srv/public
-        try_files {path} /index.html
-        file_server
-    }
-    encode gzip
+    import common
 }
