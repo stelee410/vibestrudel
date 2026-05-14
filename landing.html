@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
 <style>
   :root{
     --bg:#08090b;
@@ -361,6 +362,69 @@
     letter-spacing:.1em;margin-left:auto;
   }
 
+  /* === QR 码三连 === */
+  .qr-row{
+    display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;
+    margin-top:24px;padding-top:20px;
+    border-top:1px dashed var(--edge);
+  }
+  .qr-card{
+    background:#0a0d0b;border:1px solid #2e4a3a;border-radius:12px;
+    padding:14px 14px 12px;text-align:center;
+    transition:.15s;
+  }
+  .qr-card:hover{border-color:var(--mint);transform:translateY(-2px)}
+  .qr-card[data-mode="show"]{border-color:#5a4318}
+  .qr-card[data-mode="show"]:hover{border-color:var(--amber)}
+  .qr-card[data-mode="input"]{border-color:#2a3a64}
+  .qr-card[data-mode="input"]:hover{border-color:var(--sky)}
+  .qr-canvas-wrap{
+    position:relative;display:inline-block;
+    background:#fff;border-radius:8px;padding:10px;
+    line-height:0;
+  }
+  .qr-canvas{
+    display:block;width:100%;max-width:180px;height:auto;
+    image-rendering:pixelated;
+  }
+  /* 中间 logo 圈,挡住 QR 中央 ~ 18% 区域 */
+  .qr-logo{
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:38px;height:38px;border-radius:9px;
+    background:conic-gradient(from 200deg, var(--orange), var(--amber), var(--mint), var(--sky), var(--magenta), var(--orange));
+    box-shadow:inset 0 0 0 3px #fff, 0 0 0 4px #fff, 0 0 8px #00000050;
+    animation:rotate 14s linear infinite;
+  }
+  .qr-logo::after{
+    content:"";position:absolute;inset:8px;border-radius:50%;background:#0a0b0e;
+    box-shadow:inset 0 0 4px #00000080;
+  }
+  .qr-card[data-mode="show"]  .qr-logo{ background:conic-gradient(from 200deg,var(--amber),var(--orange),var(--amber)); }
+  .qr-card[data-mode="input"] .qr-logo{ background:conic-gradient(from 200deg,var(--sky),var(--magenta),var(--cyan),var(--sky)); }
+  .qr-label{
+    margin-top:10px;font-family:var(--font-mono);font-size:11px;
+    letter-spacing:.18em;color:var(--mint);font-weight:700;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .qr-card[data-mode="show"] .qr-label{color:var(--amber)}
+  .qr-card[data-mode="input"] .qr-label{color:var(--sky)}
+  .qr-icon{font-size:13px;opacity:.9}
+  .qr-sub{
+    margin-top:4px;font-family:var(--font-mono);font-size:9.5px;
+    color:var(--txt-faint);letter-spacing:.04em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    direction:rtl;text-align:center;  /* 太长省略号在前面 */
+  }
+  .qr-tip{
+    text-align:center;margin-top:12px;
+    font-family:var(--font-mono);font-size:11px;color:var(--txt-dim);
+    letter-spacing:.1em;
+  }
+  @media (max-width:680px){
+    .qr-row{grid-template-columns:1fr;gap:12px}
+  }
+
   @media (max-width:780px){
     .steps-grid{grid-template-columns:1fr}
     .equalizer{height:40px}
@@ -459,6 +523,35 @@
         <button class="sc-btn ghost" id="sc-new" type="button">↻ NEW · 重新创建</button>
         <span class="sc-tip">5 分钟内无任何活动会自动回收</span>
       </div>
+
+      <!-- 三个 QR 码: party / show / input -->
+      <div class="qr-row" id="qr-row">
+        <div class="qr-card" data-mode="party">
+          <div class="qr-canvas-wrap">
+            <canvas class="qr-canvas" id="qr-party"></canvas>
+            <div class="qr-logo" data-color="orange"></div>
+          </div>
+          <div class="qr-label"><span class="qr-icon">🎛</span> PARTY · 完整</div>
+          <div class="qr-sub" id="qr-party-url">/app/—</div>
+        </div>
+        <div class="qr-card" data-mode="show">
+          <div class="qr-canvas-wrap">
+            <canvas class="qr-canvas" id="qr-show"></canvas>
+            <div class="qr-logo" data-color="amber"></div>
+          </div>
+          <div class="qr-label"><span class="qr-icon">📺</span> SHOW · 大屏</div>
+          <div class="qr-sub" id="qr-show-url">/app/—?mode=show</div>
+        </div>
+        <div class="qr-card" data-mode="input">
+          <div class="qr-canvas-wrap">
+            <canvas class="qr-canvas" id="qr-input"></canvas>
+            <div class="qr-logo" data-color="blue"></div>
+          </div>
+          <div class="qr-label"><span class="qr-icon">🎚</span> INPUT · 控制</div>
+          <div class="qr-sub" id="qr-input-url">/app/—?mode=input</div>
+        </div>
+      </div>
+      <div class="qr-tip">📱 手机扫描任一二维码即可加入</div>
     </div>
   </div>
 </section>
@@ -588,20 +681,52 @@
       const res = await fetch("/sessions", { method: "POST" });
       if (!res.ok) throw new Error("server returned " + res.status);
       const { id } = await res.json();
-      const url = `${location.origin}/app/${id}`;
-      urlInput.value = url;
+      const partyUrl = `${location.origin}/app/${id}`;
+      const showUrl  = `${location.origin}/app/${id}?mode=show`;
+      const inputUrl = `${location.origin}/app/${id}?mode=input`;
+      urlInput.value = partyUrl;
       enterLnk.href = `/app/${id}`;
+      document.getElementById("qr-party-url").textContent = `/app/${id}`;
+      document.getElementById("qr-show-url").textContent  = `/app/${id}?mode=show`;
+      document.getElementById("qr-input-url").textContent = `/app/${id}?mode=input`;
+      // 生成三个 QR
+      renderQR("qr-party", partyUrl, "#0a0d0b", "#7cffb6");
+      renderQR("qr-show",  showUrl,  "#1a130a", "#ffb347");
+      renderQR("qr-input", inputUrl, "#08101e", "#7aa2ff");
       card.classList.add("show");
       btn.classList.remove("loading");
       btn.querySelector(".text").textContent = "CREATE ANOTHER · 再开一个";
-      // 自动滚动到卡片可见
-      setTimeout(()=>card.scrollIntoView({behavior:"smooth", block:"center"}), 100);
-      // 自动选中 URL,方便手动复制
+      setTimeout(()=>card.scrollIntoView({behavior:"smooth", block:"start"}), 100);
       setTimeout(()=>urlInput.select(), 400);
     } catch(e){
       btn.classList.remove("loading");
       btn.querySelector(".text").textContent = "CREATE FAILED · 重试";
       console.error(e);
+    }
+  }
+
+  function renderQR(canvasId, url){
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.QrCreator) { console.warn("QR lib not ready"); return; }
+    // qr-creator render 到一个容器,清空再渲染
+    const wrap = canvas.parentElement;
+    canvas.remove();   // 移除旧 canvas
+    QrCreator.render({
+      text: url,
+      radius: 0.0,
+      ecLevel: "H",     // 高纠错允许中央 logo
+      fill: "#000000",
+      background: "#ffffff",
+      size: 360,
+    }, wrap);
+    // qr-creator 会插入一个新 canvas; 把 id 加回来,并把 logo 重新放到最后(z-index 上层)
+    const newCanvas = wrap.querySelector("canvas");
+    if (newCanvas){
+      newCanvas.id = canvasId;
+      newCanvas.classList.add("qr-canvas");
+      // 把 logo div 移到 canvas 后面(保持在 stacking 上方,绝对定位的)
+      const logo = wrap.querySelector(".qr-logo");
+      if (logo) wrap.appendChild(logo);
     }
   }
 
