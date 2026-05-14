@@ -7,16 +7,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/themes/default.css" />
 <script>
-  // 模式检测 (?mode=show|input)
+  // 1) CSS 带 timestamp 强制 fresh (绕开浏览器缓存)
+  document.write('<link rel="stylesheet" href="/themes/default.css?t=' + Date.now() + '">');
+  // 2) 模式检测 (?mode=show|input)
   (function(){
     var m = new URLSearchParams(location.search).get("mode");
     if (m === "show" || m === "input"){
+      document.documentElement.classList.add("mode-" + m);
       document.addEventListener("DOMContentLoaded", function(){
         document.body.classList.add("mode-" + m);
       });
-      document.documentElement.classList.add("mode-" + m);
     }
   })();
 </script>
