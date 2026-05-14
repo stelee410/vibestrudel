@@ -21,6 +21,7 @@
     }
   })();
 </script>
+<script src="/themes/i18n.js"></script>
 </head>
 <body>
 
@@ -32,23 +33,24 @@
       <div class="logo"></div>
       <div>
         <h1>VIBE<span class="sep">//</span>STRUDEL</h1>
-        <div class="sub">Live Pattern Translator · v1.0</div>
+        <div class="sub" data-i18n="brand.subtitle">Live Pattern Translator · v1.0</div>
       </div>
     </a>
 
     <div class="leds">
-      <div class="led on" data-color="green" id="led-power"><span class="dot"></span><span class="label">PWR</span></div>
-      <div class="led" data-color="blue" id="led-ai"><span class="dot"></span><span class="label">AI</span></div>
-      <div class="led" data-color="amber" id="led-audio"><span class="dot"></span><span class="label">AUDIO</span></div>
-      <div class="led" data-color="red" id="led-err"><span class="dot"></span><span class="label">FAULT</span></div>
+      <div class="led on" data-color="green" id="led-power"><span class="dot"></span><span class="label" data-i18n="led.pwr">PWR</span></div>
+      <div class="led" data-color="blue" id="led-ai"><span class="dot"></span><span class="label" data-i18n="led.ai">AI</span></div>
+      <div class="led" data-color="amber" id="led-audio"><span class="dot"></span><span class="label" data-i18n="led.audio">AUDIO</span></div>
+      <div class="led" data-color="red" id="led-err"><span class="dot"></span><span class="label" data-i18n="led.fault">FAULT</span></div>
     </div>
 
     <div class="meta">
       <div class="bpm-display"><span class="v" id="bpm-readout">120</span><span class="l">BPM</span></div>
-      <a class="party-badge" id="party-badge" style="display:none" title="点击复制 session URL"><span class="party-dot"></span><span>PARTY</span><span class="party-id" id="party-id"></span></a>
-      <span class="mode-badge mode-show-only">📺 SHOW</span>
-      <span class="mode-badge mode-input-only">🎛 INPUT</span>
-      <button class="key-btn" id="api-key-btn">API KEY</button>
+      <a class="party-badge" id="party-badge" style="display:none" title="点击复制 session URL"><span class="party-dot"></span><span data-i18n="party.label">PARTY</span><span class="party-id" id="party-id"></span></a>
+      <span class="mode-badge mode-show-only" data-i18n="mode.show">📺 SHOW</span>
+      <span class="mode-badge mode-input-only" data-i18n="mode.input">🎛 INPUT</span>
+      <span id="lang-switcher"></span>
+      <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
   </header>
 
@@ -59,14 +61,14 @@
       <span class="screw tl"></span><span class="screw tr"></span>
       <span class="screw bl"></span><span class="screw br"></span>
       <div class="panel-head">
-        <div class="title">PATTERN · LIVE CODE</div>
+        <div class="title" data-i18n="code.title">PATTERN · LIVE CODE</div>
         <div class="right">
-          <button class="head-btn run" id="run-btn" title="执行当前代码 (Ctrl/Cmd + Enter)">▶ RUN</button>
-          <button class="head-btn auto-on" id="auto-btn" title="编辑后自动评估,下一个 cycle 生效">⟳ AUTO</button>
-          <button class="head-btn" id="copy-btn" title="复制全部代码到剪贴板">⧉ COPY</button>
-          <span class="badge dirty" id="dirty-badge" style="display:none">EDITED</span>
+          <button class="head-btn run" id="run-btn" data-i18n="code.run">▶ RUN</button>
+          <button class="head-btn auto-on" id="auto-btn">⟳ AUTO</button>
+          <button class="head-btn" id="copy-btn" data-i18n="code.copy">⧉ COPY</button>
+          <span class="badge dirty" id="dirty-badge" style="display:none" data-i18n="code.edited">EDITED</span>
           <span class="badge" id="cycle-badge">CYCLE 0</span>
-          <span class="badge live" id="live-badge">STANDBY</span>
+          <span class="badge live" id="live-badge" data-i18n="code.standby">STANDBY</span>
         </div>
       </div>
       <div class="code-area"><pre id="code-display" contenteditable="plaintext-only" spellcheck="false"><span class="tok-cmt">// 等待第一条指令,或点 PRESET BANK 中的预设</span>
@@ -79,7 +81,7 @@
       <span class="screw tl"></span><span class="screw tr"></span>
       <span class="screw bl"></span><span class="screw br"></span>
       <div class="panel-head">
-        <div class="title">CONSOLE · VIBE I/O</div>
+        <div class="title" data-i18n="console.title">CONSOLE · VIBE I/O</div>
         <div class="right">
           <span class="badge" id="model-badge">GEMINI 2.5 FLASH</span>
         </div>
@@ -91,9 +93,9 @@
             <button class="hints-btn" id="hints-btn" title="Hints — 提示词模板">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 4 12.7c-.7.5-1 1.3-1 2.1V18H9v-1.2c0-.8-.3-1.6-1-2.1A7 7 0 0 1 12 2Z"/></svg>
             </button>
-            <div class="prompt-prefix">vibe&gt;</div>
-            <textarea id="prompt" placeholder="用中文或英文描述你想要的氛围 · 回车发送 · Shift+Enter 换行"></textarea>
-            <button class="send" id="send-btn">SEND</button>
+            <div class="prompt-prefix" data-i18n="vibe.prompt">vibe&gt;</div>
+            <textarea id="prompt" data-i18n-attr="placeholder:vibe.placeholder" placeholder="Describe the vibe..."></textarea>
+            <button class="send" id="send-btn" data-i18n="btn.send">SEND</button>
           </div>
         </div>
       </div>
@@ -104,15 +106,15 @@
       <span class="screw tl"></span><span class="screw tr"></span>
       <span class="screw bl"></span><span class="screw br"></span>
       <div class="panel-head" id="preset-head">
-        <div class="title">PRESET BANK <span class="chevron">▾</span></div>
+        <div class="title"><span data-i18n="preset.title">PRESET BANK</span> <span class="chevron">▾</span></div>
         <div class="right">
-          <span class="badge">CLICK TO LOAD &amp; PLAY</span>
+          <span class="badge" data-i18n="preset.click_to_play">CLICK TO LOAD &amp; PLAY</span>
         </div>
       </div>
       <div class="preset-tabs" id="preset-tabs">
-        <button class="preset-tab on" data-source="all">全部 <span class="count" id="count-all">·</span></button>
-        <button class="preset-tab" data-source="builtin">内置 <span class="count" id="count-builtin">·</span></button>
-        <button class="preset-tab" data-source="community">社区 <span class="count" id="count-community">·</span></button>
+        <button class="preset-tab on" data-source="all"><span data-i18n="preset.tab.all">All</span> <span class="count" id="count-all">·</span></button>
+        <button class="preset-tab" data-source="builtin"><span data-i18n="preset.tab.builtin">Built-in</span> <span class="count" id="count-builtin">·</span></button>
+        <button class="preset-tab" data-source="community"><span data-i18n="preset.tab.community">Community</span> <span class="count" id="count-community">·</span></button>
       </div>
       <div class="preset-grid" id="preset-grid"></div>
     </section>
@@ -122,22 +124,22 @@
   <footer class="transport">
     <span class="screw tl"></span><span class="screw bl"></span>
     <div class="group">
-      <button class="tbtn play" id="btn-play" title="播放当前模式" disabled>
+      <button class="tbtn play" id="btn-play" data-i18n-attr="title:transport.play" disabled>
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <button class="tbtn stop" id="btn-stop" title="HUSH 静音" disabled>
+      <button class="tbtn stop" id="btn-stop" data-i18n-attr="title:transport.stop" disabled>
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
       </button>
-      <span class="tlabel">TRANSPORT</span>
+      <span class="tlabel" data-i18n="transport.label">TRANSPORT</span>
     </div>
 
     <div class="group" style="justify-content:center">
-      <span class="tlabel">LEVEL</span>
+      <span class="tlabel" data-i18n="transport.level">LEVEL</span>
       <div class="meter" id="meter" data-level="0"></div>
     </div>
 
     <div class="group">
-      <span class="tlabel">TEMPO</span>
+      <span class="tlabel" data-i18n="transport.tempo">TEMPO</span>
       <div class="bpm-knob">
         <button class="nudge" id="bpm-down">−</button>
         <input id="bpm-input" type="number" min="40" max="240" value="120" />
@@ -480,24 +482,57 @@
 
   // 关键: Strudel 的解析错误不通过 throw 抛出,而是 dispatch 'strudel.log' 事件
   // 监听这个事件才能拿到解析/库错误并显示到 UI
+  // + 错误去重: 同一错误每 12s 只 log 一次, 避免 getTrigger 每 cycle 刷屏
+  // + 带 🔧 Fix? 按钮触发 AI 修复
   let strudelLogJustHandled = false;
+  const recentErrors = new Map();  // errorKey → { lastAt, count }
+  function logStrudelError(msg){
+    const row = document.createElement("div");
+    row.className = "row";
+    const ts = new Date().toTimeString().slice(0,8);
+    row.innerHTML =
+      `<span class="ts">${ts}</span>`+
+      `<span class="tag err">ERR</span>`+
+      `<span class="msg"></span> `;
+    row.querySelector(".msg").textContent = msg.slice(0, 240);
+    // Fix 按钮 — 让 AI 自动修
+    const fix = document.createElement("button");
+    fix.className = "fix-btn";
+    fix.textContent = "🔧 " + (window.I18N ? I18N.t("err.fix_q") : "Fix?");
+    fix.title = "让 AI 修复这个错误";
+    fix.addEventListener("click", ()=>{
+      // 截短错误信息(防止注入大段 stack trace 进 AI)
+      const cleanMsg = msg.replace(/\s*at\s+.*/gs, "").trim().slice(0, 300);
+      if (typeof sendInstruction === "function"){
+        sendInstruction(`修复上一次代码的错误: ${cleanMsg}`);
+      }
+      fix.disabled = true; fix.textContent = "✓ asking AI...";
+    });
+    row.appendChild(fix);
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
   document.addEventListener("strudel.log", (e)=>{
     const msg = e.detail?.message || "";
     if (/\berror[: ]/i.test(msg)){
       strudelLogJustHandled = true;
       const m = msg.match(/\((\d+):(\d+)\)/);
-      if (m){
-        const line = +m[1], col = +m[2];
-        markErrorLine(line, msg);
-        log("err", `L${line}:${col}  ${msg}`);
-      } else {
-        log("err", msg);
+      if (m) markErrorLine(+m[1], msg);
+      // 去重: 同 key 12s 内不再 log
+      const key = msg.replace(/\s*\(\d+:\d+\)/g, "").replace(/\s+/g, " ").slice(0, 120);
+      const now = Date.now();
+      const rec = recentErrors.get(key);
+      if (rec && (now - rec.lastAt) < 12000){
+        rec.count++; rec.lastAt = now;
+        return;  // 抑制重复
       }
+      recentErrors.set(key, { lastAt: now, count: (rec?.count || 0) + 1 });
+      logStrudelError(msg);
       setLed(ledErr, true);
     } else if (/\bcode updated\b/i.test(msg)){
-      // 解析成功 — 清掉之前的错误标记
       clearErrorMark();
       setLed(ledErr, false);
+      recentErrors.clear();   // 新代码成功 → 重置去重
     }
   });
   function setCode(code){
@@ -1082,6 +1117,9 @@ __CODE__
     }
   }
 
+  // INPUT 模式: 客户端只是控制器, 不播放音频
+  const IS_INPUT_MODE = new URLSearchParams(location.search).get("mode") === "input";
+
   async function pollSession(){
     if (!PARTY_MODE) return;
     const idle = Date.now() - party.lastInteraction;
@@ -1107,8 +1145,11 @@ __CODE__
             } else {
               log("sys", `↳ 加载现有 session 状态 (seq ${data.seq})`);
             }
-            setCode(data.code);
-            try { await evaluatePattern(data.code); } catch(_){}
+            // INPUT 模式只显示日志, 不播放 — 这是控制器, 不是 audio 输出端
+            if (!IS_INPUT_MODE){
+              setCode(data.code);
+              try { await evaluatePattern(data.code); } catch(_){}
+            }
           }
         }
       }
@@ -1879,6 +1920,7 @@ stack(
 
   // ---------- Boot ----------
   updateModelBadge();
+  if (window.I18N) window.I18N.renderSwitcher("#lang-switcher");
   log("sys","系统就绪 · 选预设或输入指令开始演奏");
 
   // === Party 模式 boot ===

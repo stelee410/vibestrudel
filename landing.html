@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
+<script src="/themes/i18n.js"></script>
 <style>
   :root{
     --bg:#08090b;
@@ -85,6 +86,13 @@
     text-decoration:none;text-transform:uppercase;font-weight:600;transition:.15s;
   }
   nav a:hover{color:var(--orange)}
+  .lang-select{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:.05em;
+    color:var(--txt-dim);background:var(--panel);
+    border:1px solid var(--edge);border-radius:5px;
+    padding:4px 8px;cursor:pointer;outline:none;
+  }
+  .lang-select:hover{color:var(--orange);border-color:var(--orange)}
 
   /* === Hero === */
   .hero{
@@ -441,9 +449,10 @@
     <h1>VIBE<span class="sep">//</span>STRUDEL<span class="live">LIVE</span></h1>
   </a>
   <nav>
-    <a href="/app">Solo · 单机</a>
+    <a href="/app" data-i18n="nav.solo">Solo</a>
     <a href="https://github.com/stelee410/vibestrudel" target="_blank">GitHub</a>
-    <a href="#how">How</a>
+    <a href="#how" data-i18n="nav.how">How</a>
+    <span id="lang-switcher"></span>
   </nav>
 </header>
 
@@ -473,18 +482,14 @@
 
   <div class="hero-inner">
     <div class="pretitle">
-      <span class="dot"></span> WORLD'S FIRST AI-POWERED COLLABORATIVE STRUDEL JAM
+      <span class="dot"></span> <span data-i18n="landing.hero_pre">WORLD'S FIRST AI-POWERED COLLABORATIVE STRUDEL JAM</span>
     </div>
 
     <h1 class="title">
       <span class="vibe">VIBE</span><span class="slash">//</span><span class="strudel">STRUDEL</span><span class="live-tag">LIVE</span>
     </h1>
 
-    <p class="tagline">
-      把氛围(<span class="hl-2">Vibe</span>)用文字描述给 AI,
-      它即时生成 <span class="hl">Strudel 模式代码</span>,<br>
-      一个房间链接 — 全球协作者 <span class="hl">同时听到</span>同一首正在演化的电子乐 jam。
-    </p>
+    <p class="tagline" data-i18n="landing.tagline_html"></p>
 
     <!-- Equalizer 装饰 -->
     <div class="equalizer" aria-hidden="true">
@@ -497,31 +502,29 @@
 
     <div class="cta-row">
       <button class="cta-primary" id="create-btn">
-        <span class="text">CREATE SESSION · 创建房间</span>
+        <span class="text" data-i18n="landing.cta_primary">CREATE SESSION · New Room</span>
         <span class="arrow">▸</span>
       </button>
-      <a class="cta-secondary" href="/app">SOLO MODE · 单机</a>
+      <a class="cta-secondary" href="/app" data-i18n="landing.cta_solo">SOLO MODE · Single Player</a>
     </div>
 
     <!-- 创建 session 后显示的结果卡 -->
     <div class="session-card" id="session-card">
       <div class="sc-label">
         <span class="sc-led"></span>
-        SESSION READY · 房间已开 · 请复制并分享
+        <span data-i18n="landing.sc.label">SESSION READY · Copy and share</span>
       </div>
       <div class="sc-url-row">
         <input class="sc-url" id="sc-url" readonly value="" />
-        <button class="sc-btn copy" id="sc-copy" title="复制到剪贴板">
+        <button class="sc-btn copy" id="sc-copy">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          <span class="copy-txt">COPY</span>
+          <span class="copy-txt" data-i18n="landing.sc.copy">COPY</span>
         </button>
       </div>
       <div class="sc-actions">
-        <a class="sc-btn enter" id="sc-enter" href="">
-          ENTER ROOM · 进入房间 ▸
-        </a>
-        <button class="sc-btn ghost" id="sc-new" type="button">↻ NEW · 重新创建</button>
-        <span class="sc-tip">5 分钟内无任何活动会自动回收</span>
+        <a class="sc-btn enter" id="sc-enter" href="" data-i18n="landing.sc.enter">ENTER ROOM ▸</a>
+        <button class="sc-btn ghost" id="sc-new" type="button" data-i18n="landing.sc.new">↻ NEW</button>
+        <span class="sc-tip" data-i18n="landing.sc.tip"></span>
       </div>
 
       <!-- 三个 QR 码: party / show / input -->
@@ -531,7 +534,7 @@
             <canvas class="qr-canvas" id="qr-party"></canvas>
             <div class="qr-logo" data-color="orange"></div>
           </div>
-          <div class="qr-label">PARTY · 完整</div>
+          <div class="qr-label" data-i18n="landing.qr.party">PARTY · Full</div>
           <div class="qr-sub" id="qr-party-url">/app/—</div>
         </div>
         <div class="qr-card" data-mode="show">
@@ -539,7 +542,7 @@
             <canvas class="qr-canvas" id="qr-show"></canvas>
             <div class="qr-logo" data-color="amber"></div>
           </div>
-          <div class="qr-label">SHOW · 大屏</div>
+          <div class="qr-label" data-i18n="landing.qr.show">SHOW · Display</div>
           <div class="qr-sub" id="qr-show-url">/app/—?mode=show</div>
         </div>
         <div class="qr-card" data-mode="input">
@@ -547,37 +550,37 @@
             <canvas class="qr-canvas" id="qr-input"></canvas>
             <div class="qr-logo" data-color="blue"></div>
           </div>
-          <div class="qr-label">INPUT · 控制</div>
+          <div class="qr-label" data-i18n="landing.qr.input">INPUT · Controller</div>
           <div class="qr-sub" id="qr-input-url">/app/—?mode=input</div>
         </div>
       </div>
-      <div class="qr-tip">📱 手机扫描任一二维码即可加入</div>
+      <div class="qr-tip" data-i18n="landing.qr.tip">📱 Scan any QR code with your phone to join</div>
     </div>
   </div>
 </section>
 
 <!-- ============== HOW IT WORKS ============== -->
 <section class="steps" id="how">
-  <div class="section-title">3 STEPS TO GO LIVE · 三步开张</div>
-  <div class="section-sub">点击 → 分享 → 一起 jam</div>
+  <div class="section-title" data-i18n="landing.steps_section">3 STEPS TO GO LIVE</div>
+  <div class="section-sub" data-i18n="landing.steps_sub">Click → Share → Jam together</div>
 
   <div class="steps-grid">
     <div class="step-card">
       <div class="step-num">01</div>
-      <h3>CREATE · 创建</h3>
-      <p>点 "CREATE SESSION",服务器返回一个唯一短链接 <code style="background:#0e1014;padding:1px 6px;border-radius:3px;font-family:var(--font-mono);font-size:11px;color:var(--mint)">/s/aB3xY7Kp</code>。Redis 后端,5 分钟无活动自动回收。</p>
+      <h3 data-i18n="landing.step1_title">CREATE</h3>
+      <p data-i18n="landing.step1_desc"></p>
       <svg class="step-icon" width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="22" fill="none" stroke="var(--orange)" stroke-width="1.5"/><path d="M30 18v24M18 30h24" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round"/></svg>
     </div>
     <div class="step-card">
       <div class="step-num">02</div>
-      <h3>SHARE · 分享</h3>
-      <p>把 URL 发到任何聊天 — 微信、Discord、Twitter。Open Graph 元数据让链接卡片在社交平台显示得很好看。</p>
+      <h3 data-i18n="landing.step2_title">SHARE</h3>
+      <p data-i18n="landing.step2_desc"></p>
       <svg class="step-icon" width="60" height="60" viewBox="0 0 60 60"><circle cx="18" cy="18" r="6" fill="none" stroke="var(--mint)" stroke-width="1.5"/><circle cx="42" cy="14" r="6" fill="none" stroke="var(--mint)" stroke-width="1.5"/><circle cx="42" cy="46" r="6" fill="none" stroke="var(--mint)" stroke-width="1.5"/><path d="M22 21l16-3M22 24l16 18" stroke="var(--mint)" stroke-width="1.5" fill="none"/></svg>
     </div>
     <div class="step-card">
       <div class="step-num">03</div>
-      <h3>JAM · 协作</h3>
-      <p>访问者输入文字描述氛围 → AI 生成代码 → 服务端校验 → 广播给同 session 所有人。下个 cycle 自动同步起效。</p>
+      <h3 data-i18n="landing.step3_title">JAM</h3>
+      <p data-i18n="landing.step3_desc"></p>
       <svg class="step-icon" width="60" height="60" viewBox="0 0 60 60"><path d="M10 30Q20 10 30 30T50 30" fill="none" stroke="var(--sky)" stroke-width="2"/><path d="M10 40Q20 20 30 40T50 40" fill="none" stroke="var(--magenta)" stroke-width="2" opacity=".7"/></svg>
     </div>
   </div>
@@ -615,39 +618,39 @@
 
 <!-- ============== FEATURES ============== -->
 <section class="features">
-  <div class="section-title">WHY VIBESTRUDEL · 为什么用</div>
-  <div class="section-sub">用 AI 协作做电子乐,从未这么轻量</div>
+  <div class="section-title" data-i18n="landing.feat_section">WHY VIBESTRUDEL</div>
+  <div class="section-sub" data-i18n="landing.feat_sub"></div>
 
   <div class="features-grid">
     <div class="feat">
       <div class="ic">▸ AUTO SYNC</div>
-      <h4>下一个 cycle 自动接入</h4>
-      <p>HTTP 轮询 + ETag,Strudel 在 cycle 边界平滑切换,不打断节奏。</p>
+      <h4 data-i18n="landing.feat1.h"></h4>
+      <p data-i18n="landing.feat1.p"></p>
     </div>
     <div class="feat">
       <div class="ic">▸ AI VIBE</div>
-      <h4>中英文都行</h4>
-      <p>"让 bass 撕裂"、"加点空灵 pad" — Gemini 3.1 Flash 翻译为合法 Strudel。</p>
+      <h4 data-i18n="landing.feat2.h"></h4>
+      <p data-i18n="landing.feat2.p"></p>
     </div>
     <div class="feat">
       <div class="ic">▸ BYOK</div>
-      <h4>自带 LLM key 旁路队列</h4>
-      <p>填自己的 Gemini/OpenAI key,不受全局 15 秒频率限制,独享额度。</p>
+      <h4 data-i18n="landing.feat3.h"></h4>
+      <p data-i18n="landing.feat3.p"></p>
     </div>
     <div class="feat">
       <div class="ic">▸ VALIDATION</div>
-      <h4>服务端 AST 校验</h4>
-      <p>JS 语法、函数白名单、超界 gain/pan 全挡掉,确保播放不崩。</p>
+      <h4 data-i18n="landing.feat4.h"></h4>
+      <p data-i18n="landing.feat4.p"></p>
     </div>
     <div class="feat">
       <div class="ic">▸ VISUAL</div>
-      <h4>全屏可视化</h4>
-      <p>.pianoroll() / .scope() / .spectrum() / .spiral() — 五种视觉叠加在 UI 上。</p>
+      <h4 data-i18n="landing.feat5.h"></h4>
+      <p data-i18n="landing.feat5.p"></p>
     </div>
     <div class="feat">
       <div class="ic">▸ OPEN</div>
-      <h4>完全开源 · 可自部署</h4>
-      <p>客户端单 HTML,服务端 docker compose 一键起,自部署 5 分钟搞定。</p>
+      <h4 data-i18n="landing.feat6.h"></h4>
+      <p data-i18n="landing.feat6.p"></p>
     </div>
   </div>
 </section>
@@ -657,13 +660,13 @@
   <div style="margin-bottom:14px">
     <a href="https://github.com/stelee410/vibestrudel" target="_blank">GitHub</a>
     <span style="color:var(--txt-faint)">·</span>
-    <a href="/app">Solo Mode</a>
+    <a href="/app" data-i18n="nav.solo">Solo</a>
     <span style="color:var(--txt-faint)">·</span>
     <a href="https://strudel.cc" target="_blank">Strudel</a>
     <span style="color:var(--txt-faint)">·</span>
     <a href="https://github.com/stelee410/vibestrudel/blob/main/DEVELOPMENT-LIVE.md" target="_blank">Docs</a>
   </div>
-  <div>BUILT FOR LIVECODERS · POWERED BY STRUDEL & GEMINI</div>
+  <div data-i18n="landing.footer_built">BUILT FOR LIVECODERS · POWERED BY STRUDEL & GEMINI</div>
 </footer>
 
 <script>
@@ -674,9 +677,12 @@
   const enterLnk = document.getElementById("sc-enter");
   const newBtn   = document.getElementById("sc-new");
 
+  // 渲染语言切换器
+  if (window.I18N) window.I18N.renderSwitcher("#lang-switcher");
+
   async function createSession(){
     btn.classList.add("loading");
-    btn.querySelector(".text").textContent = "CREATING SESSION...";
+    btn.querySelector(".text").textContent = I18N.t("landing.creating");
     try{
       const res = await fetch("/sessions", { method: "POST" });
       if (!res.ok) throw new Error("server returned " + res.status);
@@ -695,12 +701,12 @@
       renderQR("qr-input", inputUrl, "#08101e", "#7aa2ff");
       card.classList.add("show");
       btn.classList.remove("loading");
-      btn.querySelector(".text").textContent = "CREATE ANOTHER · 再开一个";
+      btn.querySelector(".text").textContent = I18N.t("landing.create_another");
       setTimeout(()=>card.scrollIntoView({behavior:"smooth", block:"start"}), 100);
       setTimeout(()=>urlInput.select(), 400);
     } catch(e){
       btn.classList.remove("loading");
-      btn.querySelector(".text").textContent = "CREATE FAILED · 重试";
+      btn.querySelector(".text").textContent = I18N.t("landing.create_failed");
       console.error(e);
     }
   }
@@ -734,21 +740,20 @@
   newBtn.addEventListener("click", createSession);
 
   copyBtn.addEventListener("click", async ()=>{
+    const origText = I18N.t("landing.sc.copy");
+    const okText = I18N.t("landing.sc.copied");
     try {
       await navigator.clipboard.writeText(urlInput.value);
-      copyBtn.classList.add("copied");
-      copyBtn.querySelector(".copy-txt").textContent = "✓ COPIED";
-      setTimeout(()=>{
-        copyBtn.classList.remove("copied");
-        copyBtn.querySelector(".copy-txt").textContent = "COPY";
-      }, 1600);
     } catch(e){
-      // fallback: select + execCommand
       urlInput.select();
       document.execCommand("copy");
-      copyBtn.querySelector(".copy-txt").textContent = "✓ COPIED";
-      setTimeout(()=>copyBtn.querySelector(".copy-txt").textContent = "COPY", 1600);
     }
+    copyBtn.classList.add("copied");
+    copyBtn.querySelector(".copy-txt").textContent = okText;
+    setTimeout(()=>{
+      copyBtn.classList.remove("copied");
+      copyBtn.querySelector(".copy-txt").textContent = origText;
+    }, 1600);
   });
 
   // Live stats refresh
