@@ -211,6 +211,73 @@ header.topbar{
 }
 .party-badge.copied{background:linear-gradient(180deg,#1a2e22,#0d1611)}
 
+/* === Show / Input 模式 === */
+.mode-badge{
+  display:none;  /* 默认不显示, 进入对应模式才显示 */
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
+  padding:6px 11px;border-radius:var(--r-ctrl);text-transform:uppercase;
+  font-weight:700;
+}
+.mode-show-only{
+  color:var(--led-warn);border:1px solid #5a4318;
+  background:linear-gradient(180deg,#2a1f0c,#1a130a);
+}
+.mode-input-only{
+  color:var(--led-ai);border:1px solid #2a3a64;
+  background:linear-gradient(180deg,#0d1428,#08101e);
+}
+body.mode-show .mode-show-only,
+body.mode-input .mode-input-only{display:inline-flex;align-items:center}
+
+/* SHOW 模式: 只显示代码区 + transport + 顶栏 */
+body.mode-show #console-panel,
+body.mode-show .preset-rack,
+body.mode-show #api-key-btn,
+body.mode-show .leds .led[data-color="blue"],   /* AI LED 无意义 */
+body.mode-show .leds .led[data-color="amber"]   /* AUDIO LED OK 留 */
+{ display:none !important }
+
+body.mode-show main{
+  grid-template-columns:1fr;
+  grid-template-rows:1fr;
+}
+body.mode-show #code-panel{
+  grid-column:1 / -1;
+}
+body.mode-show #code-panel .panel-head .right .head-btn,
+body.mode-show #code-panel .panel-head .right .badge.dirty{display:none}
+
+/* INPUT 模式: 只显示控制台输入区 + 顶栏 (徽章) */
+body.mode-input #code-panel,
+body.mode-input .preset-rack,
+body.mode-input footer.transport,
+body.mode-input .bpm-display,
+body.mode-input .leds
+{ display:none !important }
+
+body.mode-input #app{
+  grid-template-rows:64px 1fr;        /* 去掉 transport 行 */
+}
+body.mode-input main{
+  grid-template-columns:1fr;
+  grid-template-rows:1fr;
+}
+body.mode-input #console-panel{
+  grid-column:1 / -1;
+  max-width:840px;margin:0 auto;width:100%;
+}
+/* 输入模式下日志区可以小一点 */
+body.mode-input .log{
+  max-height:40vh;
+}
+/* 输入框做大些 */
+body.mode-input textarea#prompt{
+  min-height:64px;font-size:15px;
+}
+body.mode-input .send{
+  font-size:13px;padding:0 24px;
+}
+
 /* ===== Main ===== */
 main{
   display:grid;grid-template-columns:1.05fr 1fr;gap:10px;min-height:0;

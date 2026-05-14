@@ -8,6 +8,20 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/themes/default.css" />
+<script>
+  // 模式检测 (?mode=show / ?mode=input) — 必须在 CSS 应用之前设 body class,避免闪烁
+  (function(){
+    var m = new URLSearchParams(location.search).get("mode");
+    if (m === "show" || m === "input"){
+      // body 还没解析,延迟到 DOMContentLoaded
+      document.addEventListener("DOMContentLoaded", function(){
+        document.body.classList.add("mode-" + m);
+      });
+      // 同时立即在 html 上加 class 避免 FOUC
+      document.documentElement.classList.add("mode-" + m);
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -33,6 +47,8 @@
     <div class="meta">
       <div class="bpm-display"><span class="v" id="bpm-readout">120</span><span class="l">BPM</span></div>
       <a class="party-badge" id="party-badge" style="display:none" title="点击复制 session URL"><span class="party-dot"></span><span>PARTY</span><span class="party-id" id="party-id"></span></a>
+      <span class="mode-badge mode-show-only">📺 SHOW</span>
+      <span class="mode-badge mode-input-only">🎛 INPUT</span>
       <button class="key-btn" id="api-key-btn">API KEY</button>
     </div>
   </header>
@@ -40,7 +56,7 @@
   <!-- ============== MAIN ============== -->
   <main>
     <!-- LEFT: live code -->
-    <section class="panel">
+    <section class="panel" id="code-panel">
       <span class="screw tl"></span><span class="screw tr"></span>
       <span class="screw bl"></span><span class="screw br"></span>
       <div class="panel-head">
@@ -60,7 +76,7 @@
     </section>
 
     <!-- RIGHT: console -->
-    <section class="panel">
+    <section class="panel" id="console-panel">
       <span class="screw tl"></span><span class="screw tr"></span>
       <span class="screw bl"></span><span class="screw br"></span>
       <div class="panel-head">
