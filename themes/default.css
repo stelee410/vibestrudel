@@ -261,21 +261,33 @@ body.mode-input #app{
 body.mode-input main{
   grid-template-columns:1fr;
   grid-template-rows:1fr;
+  align-items:stretch;
 }
 body.mode-input #console-panel{
   grid-column:1 / -1;
-  max-width:840px;margin:0 auto;width:100%;
+  max-width:920px;margin:0 auto;
+  width:100%;height:100%;
+  display:flex;flex-direction:column;
 }
-/* 输入模式下日志区可以小一点 */
+body.mode-input .console-area{
+  flex:1;min-height:0;display:flex;flex-direction:column;
+}
 body.mode-input .log{
-  max-height:40vh;
+  flex:1;min-height:0;overflow-y:auto;   /* 不卡高度,自然填满 */
 }
-/* 输入框做大些 */
+/* 输入区固定在底部 */
+body.mode-input .input-zone{
+  flex-shrink:0;
+}
 body.mode-input textarea#prompt{
-  min-height:64px;font-size:15px;
+  min-height:80px;max-height:200px;font-size:16px;line-height:1.5;
+  padding:14px 16px;
 }
 body.mode-input .send{
-  font-size:13px;padding:0 24px;
+  font-size:14px;padding:0 28px;font-weight:800;
+}
+body.mode-input .input-row{
+  gap:10px;
 }
 
 /* ===== Main ===== */
