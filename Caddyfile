@@ -54,16 +54,14 @@
     # === 静态资源 ===
     handle {
         file_server
-        # vendor 体积大且按版本/内容稳定 → 长缓存
-        @vendor path /vendor/*
-        header @vendor Cache-Control "public, max-age=86400"
-        # themes 经常调,不缓存(避免开发时缓存死锁)
-        @themes path /themes/*
-        header @themes Cache-Control "no-cache, must-revalidate"
-        # HTML 永远拉最新
-        @html path /*.html
-        header @html Cache-Control "no-cache, must-revalidate"
     }
+
+    # === 缓存策略 (全局生效, 含 rewrite 后的响应) ===
+    # 默认所有响应都 no-cache (避免开发时 HTML/CSS 死锁)
+    header Cache-Control "no-cache, must-revalidate"
+    # 只有 vendor (大体积、变化少) 才长缓存
+    @vendor path /vendor/*
+    header @vendor Cache-Control "public, max-age=86400"
 
     encode gzip zstd
 }
