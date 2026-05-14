@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    # 不挂卷 — 内存唯一,重启丢数据是预期(session ephemeral)
+
+  app:
+    build: ./server
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - MONTHLY_CAP_USD=${MONTHLY_CAP_USD:-30}
+      - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-300}
+      - GLOBAL_RATE_SECONDS=${GLOBAL_RATE_SECONDS:-15}
+      - PER_IP_RATE_SECONDS=${PER_IP_RATE_SECONDS:-60}
+      - SELF_RATE_SECONDS=${SELF_RATE_SECONDS:-5}
+      - LLM_MAX_RETRY=${LLM_MAX_RETRY:-1}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://live.linkyun.co}
+      - PORT=8080
+      - NODE_ENV=production
+      - MANIFEST_DIR=/app/manifests
+    volumes:
+      # 把 manifest JSON 挂进去给校验器查 sample/bank 名
+      - ./vendor/samples/dirt-samples/strudel.json:/app/manifests/dirt-samples.strudel.json:ro
+      - ./vendor/samples/tidal-drum-machines.json:/app/manifests/tidal-drum-machines.json:ro
+      - ./vendor/samples/piano.json:/app/manifests/piano.json:ro
+      - ./vendor/samples/vcsl.json:/app/manifests/vcsl.json:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./public:/srv/public:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

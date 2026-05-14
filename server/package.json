@@ -1,0 +1,22 @@
+{
+  "name": "vibestrudel-live-server",
+  "version": "1.0.0",
+  "description": "VibeStrudel Live sync hub — multi-session Strudel collaboration via HTTP polling",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "@fastify/cors": "^10.0.1",
+    "ioredis": "^5.4.2",
+    "nanoid": "^5.0.9",
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

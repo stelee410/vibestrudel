@@ -8,6 +8,13 @@
 vendor/strudel-build/node_modules/
 vendor/strudel-build/package-lock.json
 
+# server runtime
+server/node_modules/
+server/package-lock.json
+server/manifests/
+.env
+public/
+
 # 大体积样本 WAV/MP3 — 不进 git, clone 后跑 setup.sh 拉取
 vendor/samples/dirt-samples/*/
 vendor/samples/tidal-drum-machines/

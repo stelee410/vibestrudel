@@ -1,0 +1,47 @@
+live.linkyun.co {
+    # API 请求转发到 app 容器
+    @api {
+        path /sessions
+        path /sessions/*
+        path /s/*
+        path /healthz
+        path /stats
+    }
+    handle @api {
+        reverse_proxy app:8080
+    }
+
+    # 静态资源(index.html / themes / vendor)
+    handle {
+        root * /srv/public
+        try_files {path} /index.html
+        file_server
+
+        # 长缓存静态资源
+        @assets path /vendor/* /themes/*
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    encode gzip zstd
+    log
+}
+
+# 本地测试 / 没域名时用 :80
+:80 {
+    @api {
+        path /sessions
+        path /sessions/*
+        path /s/*
+        path /healthz
+        path /stats
+    }
+    handle @api {
+        reverse_proxy app:8080
+    }
+    handle {
+        root * /srv/public
+        try_files {path} /index.html
+        file_server
+    }
+    encode gzip
+}
