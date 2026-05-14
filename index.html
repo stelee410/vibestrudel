@@ -32,6 +32,7 @@
 
     <div class="meta">
       <div class="bpm-display"><span class="v" id="bpm-readout">120</span><span class="l">BPM</span></div>
+      <a class="party-badge" id="party-badge" style="display:none" title="点击复制 session URL"><span class="party-dot"></span><span>PARTY</span><span class="party-id" id="party-id"></span></a>
       <button class="key-btn" id="api-key-btn">API KEY</button>
     </div>
   </header>
@@ -379,6 +380,14 @@
     busy: false,
     history: [],   // {role:"user"|"assistant", content}
   };
+
+  // ---------- Party mode (live session) ----------
+  // URL  /s/<id>  或  /app/<id>  → party 模式; 其他 → solo
+  const PARTY_MATCH = location.pathname.match(/^\/(s|app)\/([a-zA-Z0-9_-]{6,20})$/);
+  const PARTY_MODE  = !!PARTY_MATCH;
+  const SESSION_ID  = PARTY_MATCH ? PARTY_MATCH[2] : null;
+  const SESSION_URL = PARTY_MODE ? `${location.origin}/s/${SESSION_ID}` : null;
+  const party = { lastSeq: -1, pollTimer: null, lastInteraction: Date.now() };
 
   // ---------- Logging ----------
   function log(tag, msg, opts={}){
@@ -946,6 +955,7 @@ __CODE__
   // ---------- Send flow ----------
   async function sendInstruction(text){
     if (!text || state.busy) return;
+    if (PARTY_MODE) return partySendInstruction(text);   // ← 走 party 路径
     if (!llmCurrentKey()){ openKeyModal(); return; }
     unlockAudioNow();  // CRITICAL: resume ctx before the LLM await burns user activation
     state.busy = true;
@@ -988,6 +998,107 @@ __CODE__
       sendBtn.textContent = "SEND";
       setLed(ledAi,false);
     }
+  }
+
+  // ---------- Party mode: send + poll ----------
+  async function partySendInstruction(text){
+    party.lastInteraction = Date.now();
+    state.busy = true;
+    state.abortCtrl = new AbortController();
+    sendBtn.classList.add("stop-mode");
+    sendBtn.querySelector("span")?.remove?.();
+    sendBtn.textContent = "✕ STOP";
+    setLed(ledAi, true, true);
+    log("usr", text);
+    promptEl.value = "";
+    const by = "anon";
+    const hasOwnKey = !!llmCurrentKey();
+
+    try {
+      if (hasOwnKey){
+        // 自带 LLM:客户端调 → PUT /s/:id/code
+        unlockAudioNow();
+        const { code, explanation } = await callLLM(text, state.abortCtrl.signal);
+        const res = await fetch(`/s/${SESSION_ID}/code`, {
+          method: "PUT",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ code, explanation, by }),
+          signal: state.abortCtrl.signal,
+        });
+        const data = await res.json().catch(()=>({}));
+        if (!res.ok){
+          log("err", `服务端拒绝: ${data.error || res.status}${data.details ? " · " + data.details : ""}`);
+          if (data.details){
+            const m = data.details.match(/\((\d+):\d+\)/);
+            if (m) markErrorLine(+m[1], data.details);
+          }
+        } else {
+          log("sys", `✓ 已推送到 session (seq=${data.seq}) · 等下一轮 poll 同步`);
+        }
+      } else {
+        // 无 key:PUT /s/:id/text → 服务端调 LLM
+        unlockAudioNow();
+        const res = await fetch(`/s/${SESSION_ID}/text`, {
+          method: "PUT",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ text, by }),
+          signal: state.abortCtrl.signal,
+        });
+        const data = await res.json().catch(()=>({}));
+        if (res.status === 429){
+          const why = {global:"全站 15s 频率",per_ip:"你 60s 冷却",budget_exceeded:"本月预算用完"}[data.reason] || data.reason;
+          log("err", `⏱ ${why} · 还要等 ${data.remainingSec}s`);
+        } else if (!res.ok){
+          log("err", `云端 LLM: ${data.error || res.status}${data.details ? " · " + data.details : ""}`);
+        } else {
+          log("ai", data.explanation || "(no description)");
+          log("sys", `✓ 服务端生成 + 校验通过 (seq=${data.seq}${data.retried ? ", 重试" + data.retried + "次" : ""})`);
+        }
+      }
+    } catch(e){
+      if (e.name === "AbortError") log("sys","已中断当前请求");
+      else log("err", e.message || String(e));
+    } finally {
+      state.busy = false;
+      state.abortCtrl = null;
+      sendBtn.classList.remove("stop-mode");
+      sendBtn.textContent = "SEND";
+      setLed(ledAi, false);
+    }
+  }
+
+  async function pollSession(){
+    if (!PARTY_MODE) return;
+    const idle = Date.now() - party.lastInteraction;
+    const interval = idle < 60_000 ? 5000 : 30_000;
+    try {
+      const headers = {"Accept":"application/json"};
+      if (party.lastSeq >= 0) headers["If-None-Match"] = `"${party.lastSeq}"`;
+      const res = await fetch(`/s/${SESSION_ID}/code`, { headers, cache:"no-store" });
+      if (res.status === 404){
+        log("err","❌ Session 已过期 (5 分钟无活动 · 请回到首页创建新 session)");
+        party.pollTimer = null;
+        return;
+      }
+      if (res.status === 304){ /* no change */ }
+      else if (res.ok){
+        const data = await res.json();
+        if (data.seq > party.lastSeq){
+          const isFirst = party.lastSeq < 0;
+          party.lastSeq = data.seq;
+          if (data.code){
+            if (!isFirst){
+              log("ai", `[${data.lastBy || "anon"}] ${data.explanation || "(no description)"} · seq ${data.seq}`);
+            } else {
+              log("sys", `↳ 加载现有 session 状态 (seq ${data.seq})`);
+            }
+            setCode(data.code);
+            try { await evaluatePattern(data.code); } catch(_){}
+          }
+        }
+      }
+    } catch(_){ /* 网络抖动静默 */ }
+    party.pollTimer = setTimeout(pollSession, interval);
   }
 
   // ---------- LLM settings modal ----------
@@ -1754,7 +1865,33 @@ stack(
   // ---------- Boot ----------
   updateModelBadge();
   log("sys","系统就绪 · 选预设或输入指令开始演奏");
-  if (!llmCurrentKey()){
+
+  // === Party 模式 boot ===
+  if (PARTY_MODE){
+    const badge = $("party-badge");
+    badge.style.display = "inline-flex";
+    $("party-id").textContent = SESSION_ID;
+    badge.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      try {
+        await navigator.clipboard.writeText(SESSION_URL);
+        badge.classList.add("copied");
+        const orig = $("party-id").textContent;
+        $("party-id").textContent = "✓ COPIED";
+        setTimeout(()=>{ badge.classList.remove("copied"); $("party-id").textContent = orig; }, 1400);
+      } catch(_){}
+    });
+    log("sys", `🎉 PARTY 模式 · session ${SESSION_ID}`);
+    log("sys", `   分享 ${SESSION_URL}`);
+    log("sys", llmCurrentKey()
+      ? "你已配 LLM key — 你的 vibe 走自己额度,跳过全局队列"
+      : "未配自己的 LLM key — 你的 vibe 用服务器云端 key (15s 全局 / 60s 你冷却)");
+    // 用户互动刷新 lastInteraction
+    promptEl.addEventListener("input", ()=>{ party.lastInteraction = Date.now(); });
+    document.addEventListener("click", ()=>{ party.lastInteraction = Date.now(); }, true);
+    // 启动轮询
+    pollSession();
+  } else if (!llmCurrentKey()){
     log("sys","首次使用：请先在右上角 API KEY 中设置 LLM");
     openKeyModal();
   } else {

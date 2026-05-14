@@ -190,6 +190,27 @@ header.topbar{
 }
 .key-btn:hover{color:var(--txt);border-color:var(--accent);box-shadow:var(--glow-accent-soft)}
 
+/* Party 模式徽章 */
+.party-badge{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
+  color:var(--led-on);text-transform:uppercase;font-weight:700;
+  padding:6px 11px;border:1px solid #2e4a3a;border-radius:var(--r-ctrl);
+  background:linear-gradient(180deg,#0d1611,#0a0d0b);
+  text-decoration:none;cursor:pointer;transition:.15s;
+  box-shadow:var(--glow-green-soft);
+}
+.party-badge:hover{box-shadow:var(--glow-green);transform:translateY(-1px)}
+.party-badge .party-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--led-on);
+  box-shadow:0 0 8px var(--led-on);animation:pulse 1.4s ease-in-out infinite;
+}
+.party-badge .party-id{
+  color:var(--txt-dim);font-weight:500;letter-spacing:.05em;
+  border-left:1px solid #2e4a3a;padding-left:7px;
+}
+.party-badge.copied{background:linear-gradient(180deg,#1a2e22,#0d1611)}
+
 /* ===== Main ===== */
 main{
   display:grid;grid-template-columns:1.05fr 1fr;gap:10px;min-height:0;

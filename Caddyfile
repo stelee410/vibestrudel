@@ -44,8 +44,8 @@
         rewrite * /index.html
         file_server
     }
-    # /s/:id (无后缀) → 永远返回 SPA index.html (浏览器分享 URL)
-    @session_view path_regexp ^/s/[a-zA-Z0-9_-]+$
+    # /s/:id 和 /app/:id 都返回 SPA — 客户端 JS 解析 URL 决定 solo/party 模式
+    @session_view path_regexp ^/(s|app)/[a-zA-Z0-9_-]+$
     handle @session_view {
         rewrite * /index.html
         file_server
