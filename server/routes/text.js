@@ -12,10 +12,10 @@ const PER_IP_RATE = parseInt(process.env.PER_IP_RATE_SECONDS || "60", 10);
 const BUDGET_CAP = parseFloat(process.env.MONTHLY_CAP_USD || "30");
 const MAX_RETRY = parseInt(process.env.LLM_MAX_RETRY || "1", 10); // 校验失败后最多再调 1 次
 
-export default async function vibeRoutes(fastify, opts) {
+export default async function textRoutes(fastify, opts) {
   const validNames = opts.validNames || { validBanks: new Set(), validSounds: new Set() };
 
-  fastify.post("/s/:id/vibe", async (req, reply) => {
+  fastify.put("/s/:id/text", async (req, reply) => {
     const { id } = req.params;
     if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) {
       return reply.code(400).send({ error: "invalid_id" });

@@ -6,7 +6,7 @@ const SELF_RATE_SEC = parseInt(process.env.SELF_RATE_SECONDS || "5", 10);
 export default async function codeRoutes(fastify, opts) {
   const validNames = opts.validNames || { validBanks: new Set(), validSounds: new Set() };
 
-  fastify.post("/s/:id/code", async (req, reply) => {
+  fastify.put("/s/:id/code", async (req, reply) => {
     const { id } = req.params;
     if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) {
       return reply.code(400).send({ error: "invalid_id" });

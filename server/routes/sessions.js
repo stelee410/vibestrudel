@@ -12,8 +12,8 @@ export default async function sessionsRoutes(fastify) {
     return { id, code: "", seq: 0 };
   });
 
-  // 拉取 session 当前状态 (轮询入口)
-  fastify.get("/s/:id", async (req, reply) => {
+  // GET /s/:id/code — 拉取 session 当前状态(轮询入口)
+  fastify.get("/s/:id/code", async (req, reply) => {
     const { id } = req.params;
     if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) {
       return reply.code(400).send({ error: "invalid_id" });

@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 
 import sessionsRoutes from "./routes/sessions.js";
 import codeRoutes from "./routes/code.js";
-import vibeRoutes from "./routes/vibe.js";
+import textRoutes from "./routes/text.js";
 import metaRoutes from "./routes/meta.js";
 
 import { loadValidNames } from "./lib/samples.js";
@@ -31,7 +31,7 @@ const validNames = await loadValidNames();
 // 路由
 await fastify.register(sessionsRoutes);
 await fastify.register(codeRoutes, { validNames });
-await fastify.register(vibeRoutes, { validNames });
+await fastify.register(textRoutes, { validNames });
 await fastify.register(metaRoutes);
 
 // 优雅退出

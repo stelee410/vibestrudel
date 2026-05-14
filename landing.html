@@ -297,6 +297,70 @@
   .cta-primary.loading{pointer-events:none;opacity:.7}
   .cta-primary.loading .arrow{animation:rotate 1s linear infinite}
 
+  /* === Session 结果卡 === */
+  .session-card{
+    max-width:680px;margin:30px auto 0;padding:24px;
+    background:linear-gradient(180deg,#15171b,#0e1014);
+    border:1px solid var(--mint);border-radius:14px;
+    box-shadow:0 0 30px #7cffb620, inset 0 1px 0 #2a3a30;
+    opacity:0;transform:translateY(-12px) scale(.98);
+    transition:opacity .35s ease, transform .35s ease;
+    pointer-events:none;
+  }
+  .session-card.show{opacity:1;transform:none;pointer-events:auto}
+  .sc-label{
+    font-family:var(--font-mono);font-size:10.5px;letter-spacing:.22em;
+    color:var(--mint);text-transform:uppercase;font-weight:700;
+    display:flex;align-items:center;gap:10px;margin-bottom:14px;
+  }
+  .sc-led{
+    width:7px;height:7px;border-radius:50%;background:var(--mint);
+    box-shadow:0 0 8px var(--mint);animation:pulse 1.4s ease-in-out infinite;
+  }
+  .sc-url-row{
+    display:flex;gap:8px;align-items:stretch;margin-bottom:14px;
+  }
+  .sc-url{
+    flex:1;min-width:0;
+    font-family:var(--font-mono);font-size:14px;
+    color:var(--mint);background:#0a0d0b;border:1px solid #2e4a3a;
+    padding:14px 16px;border-radius:8px;outline:none;
+    text-overflow:ellipsis;
+    text-shadow:0 0 8px #7cffb640;
+  }
+  .sc-url:focus{border-color:var(--mint);box-shadow:0 0 0 2px #7cffb630}
+  .sc-btn{
+    font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;cursor:pointer;
+    padding:0 18px;border-radius:8px;border:1px solid var(--edge);
+    color:var(--txt);background:linear-gradient(180deg,#23272f,#1a1d23);
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    transition:.15s;text-decoration:none;
+  }
+  .sc-btn:hover{border-color:var(--mint);color:var(--mint);box-shadow:0 0 12px #7cffb640}
+  .sc-btn.copy{min-width:96px}
+  .sc-btn.copy.copied{
+    color:var(--mint);border-color:var(--mint);background:linear-gradient(180deg,#0d1611,#0a0d0b);
+    box-shadow:0 0 14px #7cffb650;
+  }
+  .sc-btn.enter{
+    color:#0a0b0e;
+    background:linear-gradient(135deg,var(--mint),var(--cyan));
+    border-color:transparent;font-weight:800;flex:1;
+    box-shadow:0 0 18px #7cffb640;
+    height:44px;
+  }
+  .sc-btn.enter:hover{filter:brightness(1.1);box-shadow:0 0 24px #7cffb670}
+  .sc-btn.ghost{
+    background:transparent;color:var(--txt-dim);height:44px;
+  }
+  .sc-btn.ghost:hover{color:var(--orange);border-color:var(--orange);box-shadow:0 0 10px #ff6b3540}
+  .sc-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .sc-tip{
+    font-family:var(--font-mono);font-size:10px;color:var(--txt-faint);
+    letter-spacing:.1em;margin-left:auto;
+  }
+
   @media (max-width:780px){
     .steps-grid{grid-template-columns:1fr}
     .equalizer{height:40px}
@@ -373,6 +437,28 @@
         <span class="arrow">▸</span>
       </button>
       <a class="cta-secondary" href="/app">SOLO MODE · 单机</a>
+    </div>
+
+    <!-- 创建 session 后显示的结果卡 -->
+    <div class="session-card" id="session-card">
+      <div class="sc-label">
+        <span class="sc-led"></span>
+        SESSION READY · 房间已开 · 请复制并分享
+      </div>
+      <div class="sc-url-row">
+        <input class="sc-url" id="sc-url" readonly value="" />
+        <button class="sc-btn copy" id="sc-copy" title="复制到剪贴板">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span class="copy-txt">COPY</span>
+        </button>
+      </div>
+      <div class="sc-actions">
+        <a class="sc-btn enter" id="sc-enter" href="">
+          ENTER ROOM · 进入房间 ▸
+        </a>
+        <button class="sc-btn ghost" id="sc-new" type="button">↻ NEW · 重新创建</button>
+        <span class="sc-tip">5 分钟内无任何活动会自动回收</span>
+      </div>
     </div>
   </div>
 </section>
@@ -488,19 +574,55 @@
 </footer>
 
 <script>
-  const btn = document.getElementById("create-btn");
-  btn.addEventListener("click", async ()=>{
+  const btn      = document.getElementById("create-btn");
+  const card     = document.getElementById("session-card");
+  const urlInput = document.getElementById("sc-url");
+  const copyBtn  = document.getElementById("sc-copy");
+  const enterLnk = document.getElementById("sc-enter");
+  const newBtn   = document.getElementById("sc-new");
+
+  async function createSession(){
     btn.classList.add("loading");
     btn.querySelector(".text").textContent = "CREATING SESSION...";
     try{
       const res = await fetch("/sessions", { method: "POST" });
       if (!res.ok) throw new Error("server returned " + res.status);
       const { id } = await res.json();
-      window.location = `/s/${id}`;
+      const url = `${location.origin}/s/${id}`;
+      urlInput.value = url;
+      enterLnk.href = `/s/${id}`;
+      card.classList.add("show");
+      btn.classList.remove("loading");
+      btn.querySelector(".text").textContent = "CREATE ANOTHER · 再开一个";
+      // 自动滚动到卡片可见
+      setTimeout(()=>card.scrollIntoView({behavior:"smooth", block:"center"}), 100);
+      // 自动选中 URL,方便手动复制
+      setTimeout(()=>urlInput.select(), 400);
     } catch(e){
       btn.classList.remove("loading");
       btn.querySelector(".text").textContent = "CREATE FAILED · 重试";
       console.error(e);
+    }
+  }
+
+  btn.addEventListener("click", createSession);
+  newBtn.addEventListener("click", createSession);
+
+  copyBtn.addEventListener("click", async ()=>{
+    try {
+      await navigator.clipboard.writeText(urlInput.value);
+      copyBtn.classList.add("copied");
+      copyBtn.querySelector(".copy-txt").textContent = "✓ COPIED";
+      setTimeout(()=>{
+        copyBtn.classList.remove("copied");
+        copyBtn.querySelector(".copy-txt").textContent = "COPY";
+      }, 1600);
+    } catch(e){
+      // fallback: select + execCommand
+      urlInput.select();
+      document.execCommand("copy");
+      copyBtn.querySelector(".copy-txt").textContent = "✓ COPIED";
+      setTimeout(()=>copyBtn.querySelector(".copy-txt").textContent = "COPY", 1600);
     }
   });
 
