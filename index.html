@@ -9,15 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/themes/default.css" />
 <script>
-  // 模式检测 (?mode=show / ?mode=input) — 必须在 CSS 应用之前设 body class,避免闪烁
+  // 模式检测 (?mode=show|input)
   (function(){
     var m = new URLSearchParams(location.search).get("mode");
     if (m === "show" || m === "input"){
-      // body 还没解析,延迟到 DOMContentLoaded
       document.addEventListener("DOMContentLoaded", function(){
         document.body.classList.add("mode-" + m);
       });
-      // 同时立即在 html 上加 class 避免 FOUC
       document.documentElement.classList.add("mode-" + m);
     }
   })();
