@@ -44,6 +44,17 @@ const SAFE_METHODS = new Set([
   "jux", "juxBy", "superimpose", "layer", "stack",
 ]);
 
+// 把 acorn 的 Literal/UnaryExpression(-Literal) 都解出真实数字, 别的返回 null
+function literalNumber(node) {
+  if (!node) return null;
+  if (node.type === "Literal" && typeof node.value === "number") return node.value;
+  if (node.type === "UnaryExpression" && node.operator === "-"
+      && node.argument?.type === "Literal" && typeof node.argument.value === "number") {
+    return -node.argument.value;
+  }
+  return null;
+}
+
 // === 校验主逻辑 ===
 
 /**
@@ -89,19 +100,70 @@ export function validate(code, ctx = {}) {
           errors.push(`unknown method: .${methodName}() — not in whitelist`);
         }
 
-        // 检查 .gain(N) 数字常量
-        if (methodName === "gain" && node.arguments[0]?.type === "Literal") {
-          const v = node.arguments[0].value;
-          if (typeof v === "number" && (v < 0 || v > 1.5)) {
-            errors.push(`.gain(${v}) out of safe range [0, 1.5]`);
+        // 检查 .gain(N) / .velocity(N) / .postgain(N) 数字常量 (含 -N 等 UnaryExpression)
+        // 上限 1.0 — 0~1.0 是音乐范围, 超过容易爆破耳膜
+        if (methodName === "gain" || methodName === "velocity" || methodName === "postgain") {
+          const v = literalNumber(node.arguments[0]);
+          if (v !== null && (v < 0 || v > 1.0)) {
+            errors.push(`.${methodName}(${v}) out of safe range [0, 1.0]`);
           }
         }
 
-        // 检查 .pan(N) 数字常量
-        if (methodName === "pan" && node.arguments[0]?.type === "Literal") {
+        // 检查 .pan(N) 数字常量 (含 -N)
+        // Strudel 的 .pan() 是 unipolar [0, 1] (0=L, 0.5=center, 1=R) — superdough 内部 2x-1
+        if (methodName === "pan") {
+          const v = literalNumber(node.arguments[0]);
+          if (v !== null && (v < 0 || v > 1)) {
+            errors.push(`.pan(${v}) out of [0, 1] (Strudel pan: 0=L, 0.5=center, 1=R)`);
+          }
+        }
+
+        // 检查 .pan(...) 内的振荡器/随机源
+        if (methodName === "pan" && node.arguments[0]) {
+          const arg = node.arguments[0];
+          // 已知会 overshoot/越界的 raw 信号源 — 必须用 .range(L,H) 包住
+          const RAW_OSC = new Set(["sine","cosine","saw","isaw","tri","triangle","square","rand","irand","perlin"]);
+
+          // a) 直接 .pan(sine) 这种 — raw oscillator outputs [0, 1] but center is 0.5,
+          //    .pan(sine) 直接传会让 sine=0 时 audioparam=-1 (硬左), 永远不到中. 必须 wrap in .range
+          if (arg.type === "Identifier" && RAW_OSC.has(arg.name)) {
+            errors.push(`.pan(${arg.name}) raw oscillator; wrap in .range(L, H) with L,H in [0, 1] (e.g. .range(0.3, 0.7))`);
+          }
+
+          // b) AST 走查 .pan 参数内任何 .range(num, num) — 边界必须 ∈ [0, 1]
+          //    包括 UnaryExpression (-0.3 之类), 别让负数从这里漏过去.
+          walkSimple(arg, {
+            CallExpression(inner) {
+              if (inner.callee?.type === "MemberExpression"
+                  && inner.callee.property?.type === "Identifier"
+                  && inner.callee.property.name === "range"
+                  && inner.arguments.length >= 2) {
+                const lo = literalNumber(inner.arguments[0]);
+                const hi = literalNumber(inner.arguments[1]);
+                if (lo !== null && (lo < 0 || lo > 1)) {
+                  errors.push(`.pan(...range(${lo}, ...)) lower bound out of [0, 1] (Strudel pan: 0=L, 0.5=center, 1=R)`);
+                }
+                if (hi !== null && (hi < 0 || hi > 1)) {
+                  errors.push(`.pan(...range(..., ${hi})) upper bound out of [0, 1] (Strudel pan: 0=L, 0.5=center, 1=R)`);
+                }
+              }
+            }
+          });
+        }
+
+        // 检查 .distort(N) / .crush(N) / .shape(N) — 避免极端失真伤耳朵
+        if ((methodName === "distort" || methodName === "shape")
+            && node.arguments[0]?.type === "Literal") {
           const v = node.arguments[0].value;
-          if (typeof v === "number" && (v < -1 || v > 1)) {
-            errors.push(`.pan(${v}) out of [-1, 1]`);
+          if (typeof v === "number" && (v < 0 || v > 0.8)) {
+            errors.push(`.${methodName}(${v}) out of safe range [0, 0.8]`);
+          }
+        }
+        if (methodName === "crush" && node.arguments[0]?.type === "Literal") {
+          const v = node.arguments[0].value;
+          // crush 是 bit depth, 越小越脏; <3 几乎全噪声
+          if (typeof v === "number" && (v < 3 || v > 16)) {
+            errors.push(`.crush(${v}) out of safe range [3, 16]`);
           }
         }
 

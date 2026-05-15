@@ -1,14 +1,12 @@
 import {
   getSession, updateSession,
-  checkRateLimit, consumeRateLimit,
   addCost, getMonthCost,
+  getHistory, appendHistory,
 } from "../lib/redis.js";
 import { validate } from "../lib/validate.js";
 import { callGemini, estimateCost } from "../lib/llm.js";
 import { SYSTEM_PROMPT } from "../lib/prompt.js";
 
-const GLOBAL_RATE = parseInt(process.env.GLOBAL_RATE_SECONDS || "15", 10);
-const PER_IP_RATE = parseInt(process.env.PER_IP_RATE_SECONDS || "60", 10);
 const BUDGET_CAP = parseFloat(process.env.MONTHLY_CAP_USD || "30");
 const MAX_RETRY = parseInt(process.env.LLM_MAX_RETRY || "1", 10); // 校验失败后最多再调 1 次
 
@@ -23,23 +21,15 @@ export default async function textRoutes(fastify, opts) {
     const cur = await getSession(id);
     if (!cur) return reply.code(404).send({ error: "session_expired" });
 
-    const ip = (req.headers["x-forwarded-for"] || req.ip || "?").split(",")[0].trim();
-
     const { text, by = "anon" } = req.body || {};
     if (typeof text !== "string" || text.length === 0 || text.length > 500) {
       return reply.code(400).send({ error: "prompt_too_long_or_empty" });
     }
 
-    // 预算检查
+    // 预算 cap 是唯一的滥用兜底
     const spent = await getMonthCost();
     if (spent >= BUDGET_CAP) {
       return reply.code(429).send({ reason: "budget_exceeded", remainingSec: -1 });
-    }
-
-    // 限流(全局 + per-IP)
-    const rl = await checkRateLimit(ip, { globalSec: GLOBAL_RATE, perIpSec: PER_IP_RATE });
-    if (!rl.ok) {
-      return reply.code(429).send({ reason: rl.reason, remainingSec: rl.remainingSec });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -52,6 +42,9 @@ export default async function textRoutes(fastify, opts) {
       .replace("__BPM__", String(bpm))
       .replace("__CODE__", cur.code || "// (empty)");
 
+    // 拉最近 5 轮对话历史 — 让 LLM 听得懂 "再暗一点" / "贝斯换成模拟" 这种增量请求
+    const history = await getHistory(id);
+
     let lastError = null;
     let lastCode = null;
     let retried = 0;
@@ -62,6 +55,7 @@ export default async function textRoutes(fastify, opts) {
           apiKey,
           systemPrompt,
           userText: text,
+          history,
           retryWith: attempt > 0 ? { prevCode: lastCode, errorMsg: lastError } : null,
         });
 
@@ -85,8 +79,11 @@ export default async function textRoutes(fastify, opts) {
           continue;  // 重试
         }
 
-        // 成功
-        await consumeRateLimit(ip, { globalSec: GLOBAL_RATE, perIpSec: PER_IP_RATE });
+        // 成功 — 把这一轮 user/model 追加到 history 给下次用
+        // model 端存返回的 JSON 字符串 (跟 LLM 当时输出的格式一致, 模型下次能"读懂自己的话")
+        await appendHistory(id, "user", text);
+        await appendHistory(id, "model", JSON.stringify({ code, explanation }));
+
         const next = await updateSession(id, {
           code,
           explanation,

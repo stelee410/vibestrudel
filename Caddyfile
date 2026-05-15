@@ -67,7 +67,7 @@
 }
 
 # 生产域名
-live.linkyun.co {
+vibe.linkyun.co {
     import common
     log
 }

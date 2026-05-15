@@ -101,6 +101,29 @@ export async function consumeSelfRateLimit(ip, perIpSec) {
   await redis.set(RL_IP(ip), "1", "EX", perIpSec);
 }
 
+// === 多轮对话历史 (per-session) ===
+// 存最近 N 轮 [user, model] 让 LLM 看得到前面在聊什么 — 用户能说"再暗一点"了
+const HIST_KEY = (id) => `history:${id}`;
+const HIST_MAX_TURNS = 10;   // 5 个 user + 5 个 model = 5 个 exchange
+
+export async function getHistory(id) {
+  const raw = await redis.get(HIST_KEY(id));
+  if (!raw) return [];
+  await redis.expire(HIST_KEY(id), TTL);
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+export async function appendHistory(id, role, text) {
+  const cur = await getHistory(id);
+  cur.push({ role, text });
+  while (cur.length > HIST_MAX_TURNS) cur.shift();
+  await redis.set(HIST_KEY(id), JSON.stringify(cur), "EX", TTL);
+}
+
+export async function clearHistory(id) {
+  await redis.del(HIST_KEY(id));
+}
+
 // === stats ===
 
 export async function statsSnapshot() {

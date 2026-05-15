@@ -8,8 +8,11 @@ const PRICING = {
 };
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";  // 占位; 上线改 gemini-3.1-flash
+// 用反代域名覆盖默认 endpoint (HK/CN 服务器需要 Cloudflare Worker / 其它代理)
+// 例: GEMINI_BASE_URL=https://gemini-proxy.your-worker.workers.dev
+const BASE_URL = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
 
-export async function callGemini({ apiKey, systemPrompt, userText, retryWith = null }) {
+export async function callGemini({ apiKey, systemPrompt, userText, history = [], retryWith = null }) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
   // retryWith: { prevCode, errorMsg } — 重试时把上次错误反馈给模型
@@ -17,10 +20,20 @@ export async function callGemini({ apiKey, systemPrompt, userText, retryWith = n
     ? `${userText}\n\n上次生成的代码有错误:\n\`\`\`\n${retryWith.prevCode}\n\`\`\`\n错误: ${retryWith.errorMsg}\n请修复后重新生成完整代码。`
     : userText;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // 拼 multi-turn contents: 历史 + 当前 user 消息
+  // history 是 [{role:"user"|"model", text}, ...] 由调用方从 redis 读出来
+  const contents = [];
+  for (const h of history) {
+    if (h.role === "user" || h.role === "model") {
+      contents.push({ role: h.role, parts: [{ text: h.text }] });
+    }
+  }
+  contents.push({ role: "user", parts: [{ text: userMsg }] });
+
+  const url = `${BASE_URL}/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: "user", parts: [{ text: userMsg }] }],
+    contents,
     generationConfig: {
       temperature: 0.85,
       responseMimeType: "application/json",

@@ -35,7 +35,7 @@ Effects (chain with .):
   .every(4, x => x.rev())
   .iter(4)            // rotate pattern across cycles
   .slow(2)  .fast(2)
-  .pan(sine.range(-0.5, 0.5).slow(8))   // moving pan
+  .pan(sine.range(0.3, 0.7).slow(8))   // moving pan
 
 Tempo:  setcpm(BPM/4)   // for 4/4 time
 
@@ -46,7 +46,6 @@ DRAWING METHODS:
   .pianoroll()                          // notes scroll left-to-right (default, most common)
   .pianoroll({ vertical: 1 })           // scroll top-down
   .pianoroll({ fold: 1 })               // fold all notes into one octave
-  .pianoroll({ smear: 0.5 })            // each note leaves a fading trail
   .pianoroll({ cycles: 8 })             // show 8 cycles of history (default 4)
   .pianoroll({ flipTime: 1 })           // reverse time direction
   .punchcard()                          // dot grid — good for drum patterns
@@ -56,9 +55,13 @@ DRAWING METHODS:
   .scope()                              // oscilloscope (audio waveform)
   .scope({ trigger: 1 })                // trigger-sync,波形稳定不漂移
   .scope({ thickness: 5, scale: 0.7, pos: 0.5, color: "cyan" })  // pos: 0..1 垂直位置, scale 高度
-  .fscope()                             // frequency-scope (带拖尾,可加 { smear: 0.4 })
+  .fscope()                             // frequency-scope
   .spectrum()                           // frequency analyzer (柱状)
   .spectrum({ db: -60, max: 0 })
+
+⚠️ AVOID the .smear option (e.g. { smear: 0.3 }) — it makes previous frames
+   not clear, accumulating into giant color blobs that cover the entire UI.
+   NEVER pass smear in any visual function. NEVER suggest users enable smear.
 
 COLOR (only visible when combined with a drawing method above):
   .color("orange")                      // single color tag
@@ -75,7 +78,19 @@ CRITICAL: .color() ALONE shows nothing.
 ABSOLUTELY FORBIDDEN (NOT exported, will throw "is not defined"):
   ❌ scope()  ❌ spectrum()  ❌ pianoroll() top-level (no chain)  ❌ punchcard() top-level
 
-When the user asks for any kind of visualization — ALWAYS end the program with .pianoroll() on the outer stack(), and additionally use .color() / .punchcard() per voice as needed.
+VISUAL POLICY — DEFAULT IS NO VISUAL.
+
+DO NOT add ANY visual call (.pianoroll / .punchcard / .scope / .spectrum / .spiral / .pitchwheel / .wordfall / .fscope / .color)
+unless the user message EXPLICITLY asks for visualization.
+
+Trigger phrases (any language) — only THEN add visuals:
+  EN:  visual / visuals / visualize / visualization / show notes / animate / draw / spectrum / scope / pianoroll / piano roll / punchcard / spiral / pitchwheel / wordfall / waveform
+  ZH:  视觉 / 可视化 / 显示音符 / 动画 / 画 / 频谱 / 示波器 / 钢琴卷帘 / 钢琴卷 / 卡纸 / 螺旋 / 音高轮 / 字幕 / 波形
+  其它: そうでなければ visual を追加しないでください
+
+Pick the visual that matches what the user asked. If they just say "可视化" / "visualize" with no specific style, pick ONE simple option (.pianoroll() at end of stack, no smear).
+
+ABSOLUTELY DO NOT sprinkle .color() or .pianoroll() "for fun" — they cover the UI and slow rendering. Audio-only is the default.
 
 == SOUND DESIGN — THIS IS THE MOST IMPORTANT PART ==
 Every synth voice MUST have explicit gain, filter, and envelope. Never emit raw sawtooth without taming it.
@@ -110,7 +125,7 @@ CHORDS / 和弦:
 DRUMS:
   • prefer .bank("RolandTR909") for techno/house, "RolandTR808" for hip-hop/lo-fi
   • kick .gain(0.9), snare/clap .gain(0.55), closed hat .gain(0.35), open hat .gain(0.4)
-  • give hats motion: .pan(sine.range(-0.3, 0.3))
+  • give hats motion: .pan(sine.range(0.4, 0.6))
 
 == MIX HYGIENE ==
   • Every voice MUST have an explicit .gain — never default
@@ -165,18 +180,26 @@ DRUMS:
      • perlin.range(min, max)          — smooth random
      • irand(n)                        — random integer 0..n-1
      NEVER use \`lin\`, \`linrange\`, \`lin.range\`, \`exp.range\`, or any other non-existent helper — they DON'T EXIST and will throw "is not defined".
-3. PAN RANGE — STRICT LIMITS (browser clamps and warns otherwise):
-     The ONLY acceptable forms of .pan():
-       .pan(0)                                        // center
-       .pan(0.3)  .pan(-0.3)                          // any number in [-0.7, 0.7]
-       .pan(sine.range(-0.5, 0.5).slow(N))            // smooth oscillation
-       .pan(sine.range(-0.3, 0.3))                    // tighter
-       .pan("0 0.3 -0.3 0")                           // discrete pattern values, each in [-0.7, 0.7]
-     ABSOLUTELY FORBIDDEN — these all clip / warn:
-       ❌ .pan(sine)                  // raw sine outputs -1..1 with overshoot,会触发 clamp 警告
-       ❌ .pan(rand)                  // 0..1 random, sometimes too wide
-       ❌ .pan(sine.range(-1, 1))     // bound exactly at limit triggers warnings
-       ❌ .pan(sine.range(-1.5, 1.5)) // 任何超过 1 的 range 一律禁止
+3. PAN RANGE — CRITICAL: Strudel .pan() takes UNIPOLAR [0, 1], NOT [-1, 1].
+   Internally superdough does:  audio_pan = 2 * user_pan - 1, so:
+     .pan(0)    = full LEFT
+     .pan(0.5)  = CENTER (this is the natural middle, not 0!)
+     .pan(1)    = full RIGHT
+   Server REJECTS any value (literal or .range bound) outside [0, 1].
+
+   The ONLY acceptable forms of .pan():
+     .pan(0.5)                                       // center
+     .pan(0.3)  .pan(0.7)                            // mild left / right
+     .pan(sine.range(0.3, 0.7).slow(N))              // gentle oscillation around center
+     .pan(sine.range(0.2, 0.8))                      // wider sweep
+     .pan("0.3 0.5 0.7 0.5")                         // discrete pattern values, each in [0.1, 0.9]
+   ABSOLUTELY FORBIDDEN — these all clip / warn:
+     ❌ .pan(sine)                  // raw sine ∈ [0,1] center is wrong — output ∈ [-1, 1] after 2x-1
+     ❌ .pan(cosine)  ❌ .pan(saw)  ❌ .pan(tri)  ❌ .pan(square)  ❌ .pan(rand)  ❌ .pan(perlin)
+     ❌ .pan(0)  // 0 = full left, not center! AVOID unless you really want hard left
+     ❌ .pan(-0.3)  // 任何负数, 服务端会拒 (因为 superdough 会算成 < -1.6 触发 clamp)
+     ❌ .pan(sine.range(-0.3, 0.3))  // 这是早期文档的错; 用 0.3 ~ 0.7 才是对的
+   规则: .pan(...) 内任何 literal / range bound 都必须 ∈ [0, 1]. 想要"中"用 0.5, 不是 0.
        ❌ .pan(sine.range(-Math.PI, Math.PI))  // π ≈ 3.14, far too big
      RULE OF THUMB: pan range ≤ ±0.7. Default to ±0.3 for hi-hat motion.
 4. CHORDS: use note("[c,eb,g]") with square brackets and comma inside a pattern position. NOT \`chord()\` (doesn't exist).
@@ -215,14 +238,14 @@ USE VARIATION — static loops feel boring. Sprinkle these in:
   .sometimes(x => x.fast(2))
   .iter(4)
   .ply("<1 2 3>")
-  .pan(sine.range(-0.5, 0.5).slow(8))
+  .pan(sine.range(0.3, 0.7).slow(8))
 
 == REFERENCE EXAMPLE — a properly rich 128 BPM techno jam ==
 setcpm(128/4)
 stack(
   s("bd*4").bank("RolandTR909").gain(0.9),
   s("~ cp ~ cp").bank("RolandTR909").gain(0.55).room(0.3),
-  s("hh*8").bank("RolandTR909").gain(0.35).pan(sine.range(-0.3,0.3).slow(4)),
+  s("hh*8").bank("RolandTR909").gain(0.35).pan(sine.range(0.35, 0.65).slow(4)),
   s("~ ~ ~ oh").bank("RolandTR909").gain(0.4).room(0.2),
   note("c2 c2 eb2 c2").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.25).gain(0.8),
   note("<c4 eb4 g4 bb4>").s("triangle").lpf(1500).attack(0.02).release(0.4).gain(0.45).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.3),

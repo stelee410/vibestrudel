@@ -2,14 +2,34 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>VIBE//STRUDEL — Live Coding Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 <script>
-  // 1) CSS 带 timestamp 强制 fresh (绕开浏览器缓存)
-  document.write('<link rel="stylesheet" href="/themes/default.css?t=' + Date.now() + '">');
+  // 0) Build timestamp — 由 deploy.sh 在每次部署时把 __BUILD_TS__ 替换成 Unix 秒.
+  // 所有 <script>/<link>/import URL 都拼这个 ?v=, 浏览器缓存按版本失效.
+  // 本地开发(没跑 deploy.sh)时会保留 __BUILD_TS__ 字符串 — 这种情况退化成 Date.now().
+  // __BUILD_TS__: HTML/CSS/i18n 版本, deploy.sh 每次替换 (轻量文件总是 fresh)
+  // __BUNDLE_VER__: vendor/strudel/index.mjs 的 sha256 短指纹, 内容没变就不变 — bundle 走 24h 缓存
+  window.__APP_VER = "__BUILD_TS__";
+  window.__BUNDLE_VER = "__BUNDLE_VER__";
+  if (window.__APP_VER === "__" + "BUILD_TS__") window.__APP_VER = String(Date.now());
+  if (window.__BUNDLE_VER === "__" + "BUNDLE_VER__") window.__BUNDLE_VER = "dev";
+  // 1) CSS 带 version 强制 fresh
+  document.write('<link rel="stylesheet" href="/themes/default.css?v=' + window.__APP_VER + '">');
+  // 1.5) 屏蔽 superdough 1.3.0 的 onceEnded 自嗨 deprecation 警告
+  // 它通过 console.log 打, 上游 @strudel/web@1.3.0 还没修(自己旧代码用 node.onended,
+  // 自己又警告自己应该用 onceEnded helper). 等上游修好这段补丁就可以删.
+  (function(){
+    var origLog = console.log;
+    console.log = function(){
+      if (arguments.length && typeof arguments[0] === "string"
+          && arguments[0].indexOf("[superdough] Deprecation") === 0) return;
+      return origLog.apply(console, arguments);
+    };
+  })();
   // 2) 模式检测 (?mode=show|input)
   (function(){
     var m = new URLSearchParams(location.search).get("mode");
@@ -21,7 +41,8 @@
     }
   })();
 </script>
-<script src="/themes/i18n.js"></script>
+<script>document.write('<script src="/themes/i18n.js?v=' + window.__APP_VER + '"><\/script>');</script>
+<script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
 </head>
 <body>
 
@@ -46,7 +67,7 @@
 
     <div class="meta">
       <div class="bpm-display"><span class="v" id="bpm-readout">120</span><span class="l">BPM</span></div>
-      <a class="party-badge" id="party-badge" style="display:none" title="点击复制 session URL"><span class="party-dot"></span><span data-i18n="party.label">PARTY</span><span class="party-id" id="party-id"></span></a>
+      <a class="party-badge" id="party-badge" style="display:none" title="点击分享 session" data-i18n-attr="title:party.share_tip"><span class="party-dot"></span><span data-i18n="party.label">PARTY</span><span class="party-id" id="party-id"></span></a>
       <span class="mode-badge mode-show-only" data-i18n="mode.show">📺 SHOW</span>
       <span class="mode-badge mode-input-only" data-i18n="mode.input">🎛 INPUT</span>
       <span id="lang-switcher"></span>
@@ -232,6 +253,49 @@
   </div>
 </div>
 
+<!-- ============== SHARE MODAL — 3 QR + copy URL ============== -->
+<div class="modal-bg" id="share-modal" style="display:none">
+  <div class="modal modal-share">
+    <button class="modal-close" id="share-close" title="关闭 (Esc)">×</button>
+    <h2 data-i18n="share.title">SHARE SESSION</h2>
+    <div class="share-grid">
+      <div class="share-card" data-mode="party">
+        <div class="share-label" data-i18n="share.party">PARTY · 完整端</div>
+        <div class="share-qr">
+          <div class="share-qr-canvas" id="share-qr-party"><canvas></canvas></div>
+          <div class="qr-logo"></div>
+        </div>
+        <div class="share-url-row">
+          <input type="text" class="share-url" id="share-url-party" readonly>
+          <button class="share-copy" data-target="share-url-party" data-i18n="share.copy">COPY</button>
+        </div>
+      </div>
+      <div class="share-card" data-mode="show">
+        <div class="share-label" data-i18n="share.show">SHOW · 演出端</div>
+        <div class="share-qr">
+          <div class="share-qr-canvas" id="share-qr-show"><canvas></canvas></div>
+          <div class="qr-logo"></div>
+        </div>
+        <div class="share-url-row">
+          <input type="text" class="share-url" id="share-url-show" readonly>
+          <button class="share-copy" data-target="share-url-show" data-i18n="share.copy">COPY</button>
+        </div>
+      </div>
+      <div class="share-card" data-mode="input">
+        <div class="share-label" data-i18n="share.input">INPUT · 观众输入端</div>
+        <div class="share-qr">
+          <div class="share-qr-canvas" id="share-qr-input"><canvas></canvas></div>
+          <div class="qr-logo"></div>
+        </div>
+        <div class="share-url-row">
+          <input type="text" class="share-url" id="share-url-input" readonly>
+          <button class="share-copy" data-target="share-url-input" data-i18n="share.copy">COPY</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ============== STRUDEL VISUAL OVERLAY (全屏, 不挡 UI) ============== -->
 <canvas id="test-canvas" aria-hidden="true"></canvas>
 
@@ -242,10 +306,12 @@
     { name: "dirt-samples",        local: "/vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
     { name: "tidal-drum-machines", local: "/vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
     { name: "piano",               local: "/vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
-    { name: "vcsl",                local: "/vendor/samples/vcsl.json",                 remote: "https://strudel.b-cdn.net/vcsl.json" },
+    // VCSL 2.4GB 太大不打包, 始终走官方 CDN (服务端仍读本地 manifest 做 bank/sound 校验)
+    { name: "vcsl",                local: null,                                        remote: "https://strudel.b-cdn.net/vcsl.json" },
   ];
   // 本地 bundle 已经把 @strudel/draw 一起打包,视觉链式方法 (.pianoroll/.scope 等) 全部可用
-  const ENGINE_LOCAL  = "/vendor/strudel/index.mjs";
+  // bundle 用 sha256 短指纹做版本 — 内容没变就不变, 浏览器走 24h 缓存不重下 1.2MB.
+  const ENGINE_LOCAL  = "/vendor/strudel/index.mjs?v=" + (window.__BUNDLE_VER || "dev");
   const ENGINE_REMOTE = "https://esm.sh/@strudel/web@1.3.0";
 
   // 读偏好: "auto"(默认) | "local" | "remote"
@@ -253,9 +319,11 @@
   window.__sampleSourcePref = sourcePref;
 
   function urlOrder(local, remote){
-    if (sourcePref === "local")  return [{ url: local,  tag: "local" }];
+    if (sourcePref === "local")  return local ? [{ url: local,  tag: "local" }] : [{ url: remote, tag: "remote" }];
     if (sourcePref === "remote") return [{ url: remote, tag: "remote" }];
-    return [{ url: local, tag: "local" }, { url: remote, tag: "remote" }];
+    return local
+      ? [{ url: local, tag: "local" }, { url: remote, tag: "remote" }]
+      : [{ url: remote, tag: "remote" }];
   }
   // 引擎: 本地优先 (含 draw, 离线可用), 远程作 fallback
   function engineOrder(){
@@ -297,8 +365,35 @@
     resizeViz();
     window.addEventListener("resize", resizeViz);
 
+    // 捕获 repl, 设置 painter dispatcher (源自 @strudel/repl 在浏览器版我们没拉)
+    // bundle 里 .onPaint() 把 painter 注册到 controls.painters, 但没人调用 —
+    // 自己跑 rAF 循环, 每帧拿当前 pattern.getPainters() 然后用 (ctx, time, haps, drawTime) 调每个.
+    // 这是 .spiral / .pitchwheel / .punchcard / .scope / .wordfall / .fscope / .spectrum 能渲染的关键.
+    const __vizCtx = vizCanvas.getContext("2d", { willReadFrequently: true });
+    let __painterLoopStarted = false;
+    function startPainterLoop(repl){
+      if (__painterLoopStarted) return;
+      __painterLoopStarted = true;
+      const lookbehind = 1, lookahead = 1;
+      function frame(){
+        try {
+          const pattern = repl?.scheduler?.pattern;
+          if (pattern && typeof pattern.getPainters === "function"){
+            const time = repl.scheduler.now ? repl.scheduler.now() : 0;
+            const haps = pattern.queryArc(time - lookbehind, time + lookahead);
+            const drawTime = [-lookbehind, lookahead];
+            const painters = pattern.getPainters();
+            for (const painter of painters){
+              try { painter(__vizCtx, time, haps, drawTime); } catch(_){}
+            }
+          }
+        } catch(_){}
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
     window.__strudelReady = mod.initStrudel({
-      drawContext: vizCanvas.getContext("2d", { willReadFrequently: true }),
+      drawContext: __vizCtx,
       prebake: async () => {
         window.dispatchEvent(new CustomEvent("strudel:samples-loading", { detail: { pref: sourcePref }}));
         const loaded = [];
@@ -323,6 +418,11 @@
         }
       },
     });
+    // initStrudel 返回 Promise<repl>; 拿到 repl 后启动 painter 循环 (.spiral / .pitchwheel 等才会渲染)
+    window.__strudelReady.then((repl) => {
+      window.__strudelRepl = repl;
+      startPainterLoop(repl);
+    }).catch((e) => console.error("[painter-loop] init failed:", e));
     window.dispatchEvent(new CustomEvent("strudel:loaded"));
   } catch (err) {
     console.error("Strudel load failed:", err);
@@ -395,7 +495,8 @@
     playing: false,
     cycle: 0,
     busy: false,
-    history: [],   // {role:"user"|"assistant", content}
+    history: [],          // {role:"user"|"assistant", content}
+    lastGoodCode: "",     // 最近一次成功 evaluate 的代码 — 失败时自动回退
   };
 
   // ---------- Party mode (live session) ----------
@@ -535,13 +636,84 @@
       recentErrors.clear();   // 新代码成功 → 重置去重
     }
   });
+  // Strudel 代码格式化 — 处理 AI 经常返回的"全挤一行"式代码.
+  // 只关心结构化分行: 顶层 `;` 后换行; stack/cat/seq 之类的容器内每个 voice 单独一行带 2 空格缩进.
+  // 字符串里的内容完全不动 (paren 深度不算, `,;` 不当分隔符).
+  function formatStrudel(src){
+    if (!src || typeof src !== "string") return src;
+    // 已经是多行的就当作"用户手敲过", 不重新格式化
+    if (src.indexOf("\n") !== -1) return src;
+    const SPLIT_FNS = new Set(["stack","cat","seq","arrange","polymeter","polyrhythm","fastcat","slowcat","timeCat","timecat"]);
+    let out = "";
+    let depth = 0;
+    let inStr = null;     // " | ' | null
+    let escape = false;
+    const splitDepths = []; // 在哪些 paren depth 上要把 , 改成换行 (即进入 stack/cat 时的 depth)
+    let i = 0;
+    while (i < src.length){
+      const c = src[i];
+      if (inStr){
+        out += c;
+        if (escape) escape = false;
+        else if (c === "\\") escape = true;
+        else if (c === inStr) inStr = null;
+        i++; continue;
+      }
+      if (c === '"' || c === "'" || c === "`"){
+        out += c; inStr = c; i++; continue;
+      }
+      if (c === "("){
+        // 看看 ( 之前的 identifier 是不是 stack/cat 之类
+        const m = out.match(/([a-zA-Z_$][\w$]*)\s*$/);
+        depth++;
+        out += "(";
+        if (m && SPLIT_FNS.has(m[1])){
+          splitDepths.push(depth);
+          out += "\n  ";
+          i++;
+          while (i < src.length && /\s/.test(src[i])) i++;
+          continue;
+        }
+        i++; continue;
+      }
+      if (c === ")"){
+        if (splitDepths.length && splitDepths[splitDepths.length - 1] === depth){
+          splitDepths.pop();
+          out = out.replace(/\s+$/, "");
+          out += "\n)";
+        } else {
+          out += ")";
+        }
+        depth--;
+        i++; continue;
+      }
+      if (c === "," && splitDepths.length && splitDepths[splitDepths.length - 1] === depth){
+        out += ",\n  ";
+        i++;
+        while (i < src.length && /\s/.test(src[i])) i++;
+        continue;
+      }
+      if (c === ";" && depth === 0){
+        out += ";\n";
+        i++;
+        while (i < src.length && /\s/.test(src[i])) i++;
+        continue;
+      }
+      out += c; i++;
+    }
+    return out.trim();
+  }
+
   function setCode(code){
-    state.code = code;
-    codeDisplay.innerHTML = highlight(code);
+    const formatted = formatStrudel(code);
+    state.code = formatted;
+    codeDisplay.innerHTML = highlight(formatted);
     // 清掉 EDITED 标记(若存在)
     state.codeDirty = false;
     const db = document.getElementById("dirty-badge");
     if (db) db.style.display = "none";
+    // 一有代码就解锁 PLAY (之前要等 evaluatePattern 第一次成功才放开 — 刷新后用户没法直接按播放)
+    if (formatted && formatted.trim() && playBtn) playBtn.disabled = false;
   }
 
   // ---------- LED helpers ----------
@@ -574,6 +746,46 @@
       });
     }
     await window.__strudelReady;
+    setupMasterLimiterOnce();
+  }
+
+  // 在硬件 destination 前插一个 DynamicsCompressor 作为 brick-wall limiter,
+  // 防 AI 生成超大 gain / 自激反馈 时炸耳膜.
+  //
+  // ❌ 不能用 Object.defineProperty(ctx, "destination", ...) 替换 — Strudel
+  //    内部会读 destination.maxChannelCount 之类的属性, 在 compressor 上 undefined
+  //    → 赋值给新节点的 channelCount 触发 "channelCount(0) outside [1,2]" 错误.
+  // ✅ 改用拦截 AudioNode.prototype.connect: 所有 connect(realDest) 都重定向到
+  //    limiter, ctx.destination 自身保持是真 AudioDestinationNode 不动.
+  let __masterLimiterInstalled = false;
+  function setupMasterLimiterOnce(){
+    if (__masterLimiterInstalled) return;
+    if (typeof window.getAudioContext !== "function") return;
+    try {
+      const ctx = window.getAudioContext();
+      if (!ctx) return;
+      const realDest = ctx.destination;
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.setValueAtTime(-3, ctx.currentTime);
+      limiter.knee.setValueAtTime(0, ctx.currentTime);
+      limiter.ratio.setValueAtTime(20, ctx.currentTime);
+      limiter.attack.setValueAtTime(0.003, ctx.currentTime);
+      limiter.release.setValueAtTime(0.25, ctx.currentTime);
+      limiter.connect(realDest);
+
+      const origConnect = AudioNode.prototype.connect;
+      AudioNode.prototype.connect = function(target, ...rest){
+        if (target === realDest && this !== limiter){
+          return origConnect.call(this, limiter, ...rest);
+        }
+        return origConnect.call(this, target, ...rest);
+      };
+
+      __masterLimiterInstalled = true;
+      console.log("[master-limiter] installed @ -3dBFS, 20:1 (via connect hook)");
+    } catch(e){
+      console.warn("[master-limiter] install failed:", e);
+    }
   }
 
   async function evaluatePattern(code){
@@ -586,10 +798,27 @@
       const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
       if (ctx && ctx.state !== "running") await ctx.resume();
     } catch(_){}
-    try{
-      strudelLogJustHandled = false;
+    strudelLogJustHandled = false;
+    let evalThrew = false;
+    let evalError = null;
+    try {
       await window.evaluate(code);
-      // 不主动 clearErrorMark; 解析失败时由 strudel.log 'error' 标记,成功时由 'code updated' 清
+    } catch (err) {
+      // Worklet 还没注册的 race — 等 500ms 重试一次
+      if (err && /AudioWorkletNode|not defined in AudioWorkletGlobalScope/i.test(err.message || "")){
+        await new Promise(r => setTimeout(r, 500));
+        try { await window.evaluate(code); }
+        catch (err2) { evalThrew = true; evalError = err2; }
+      } else {
+        evalThrew = true;
+        evalError = err;
+      }
+    }
+    // strudel 的解析错误不抛而是发 strudel.log 事件,所以两个信号都要看
+    const evalOk = !evalThrew && !strudelLogJustHandled;
+
+    if (evalOk){
+      state.lastGoodCode = code;
       state.playing = true;
       state.cycle++;
       cycleBadge.textContent = "CYCLE " + state.cycle;
@@ -601,21 +830,28 @@
       stopBtn.disabled = false;
       playBtn.classList.add("on");
       animateMeter();
-    } catch(err){
-      // strudel.log 已经处理过的就不重复打 (避免相同错误出两条)
-      if (!strudelLogJustHandled){
-        setLed(ledErr,true);
-        const loc = parseErrorLocation(err);
-        const msg = err.message || String(err);
-        if (loc){
-          markErrorLine(loc.line, msg);
-          log("err",`L${loc.line}:${loc.col}  ${msg}`);
-        } else {
-          log("err","Strudel 执行失败: " + msg);
-        }
-      }
-      throw err;
+      return;
     }
+
+    // 失败路径 — 先记录错误,然后尝试回退到上一份可用代码 (音乐不中断)
+    if (evalThrew && !strudelLogJustHandled){
+      setLed(ledErr,true);
+      const loc = parseErrorLocation(evalError);
+      const msg = (evalError && evalError.message) || String(evalError);
+      if (loc){
+        markErrorLine(loc.line, msg);
+        log("err",`L${loc.line}:${loc.col}  ${msg}`);
+      } else {
+        log("err","Strudel 执行失败: " + msg);
+      }
+    }
+    if (state.lastGoodCode && state.lastGoodCode !== code){
+      try {
+        await window.evaluate(state.lastGoodCode);
+        log("sys","↩ 出错已自动回退到上一份可用代码 (音乐继续)");
+      } catch(_){}
+    }
+    if (evalThrew) throw evalError;
   }
 
   function hushAll(){
@@ -683,7 +919,7 @@ Effects (chain with .):
   .every(4, x => x.rev())
   .iter(4)            // rotate pattern across cycles
   .slow(2)  .fast(2)
-  .pan(sine.range(-0.5, 0.5).slow(8))   // moving pan
+  .pan(sine.range(0.25, 0.75).slow(8))   // moving pan
 
 Tempo:  setcpm(BPM/4)   // for 4/4 time
 
@@ -758,7 +994,7 @@ CHORDS / 和弦:
 DRUMS:
   • prefer .bank("RolandTR909") for techno/house, "RolandTR808" for hip-hop/lo-fi
   • kick .gain(0.9), snare/clap .gain(0.55), closed hat .gain(0.35), open hat .gain(0.4)
-  • give hats motion: .pan(sine.range(-0.3, 0.3))
+  • give hats motion: .pan(sine.range(0.35, 0.65))
 
 == MIX HYGIENE ==
   • Every voice MUST have an explicit .gain — never default
@@ -817,8 +1053,8 @@ DRUMS:
      The ONLY acceptable forms of .pan():
        .pan(0)                                        // center
        .pan(0.3)  .pan(-0.3)                          // any number in [-0.7, 0.7]
-       .pan(sine.range(-0.5, 0.5).slow(N))            // smooth oscillation
-       .pan(sine.range(-0.3, 0.3))                    // tighter
+       .pan(sine.range(0.25, 0.75).slow(N))            // smooth oscillation
+       .pan(sine.range(0.35, 0.65))                    // tighter
        .pan("0 0.3 -0.3 0")                           // discrete pattern values, each in [-0.7, 0.7]
      ABSOLUTELY FORBIDDEN — these all clip / warn:
        ❌ .pan(sine)                  // raw sine outputs -1..1 with overshoot,会触发 clamp 警告
@@ -863,14 +1099,14 @@ USE VARIATION — static loops feel boring. Sprinkle these in:
   .sometimes(x => x.fast(2))
   .iter(4)
   .ply("<1 2 3>")
-  .pan(sine.range(-0.5, 0.5).slow(8))
+  .pan(sine.range(0.25, 0.75).slow(8))
 
 == REFERENCE EXAMPLE — a properly rich 128 BPM techno jam ==
 setcpm(128/4)
 stack(
   s("bd*4").bank("RolandTR909").gain(0.9),
   s("~ cp ~ cp").bank("RolandTR909").gain(0.55).room(0.3),
-  s("hh*8").bank("RolandTR909").gain(0.35).pan(sine.range(-0.3,0.3).slow(4)),
+  s("hh*8").bank("RolandTR909").gain(0.35).pan(sine.range(0.35,0.65).slow(4)),
   s("~ ~ ~ oh").bank("RolandTR909").gain(0.4).room(0.2),
   note("c2 c2 eb2 c2").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.25).gain(0.8),
   note("<c4 eb4 g4 bb4>").s("triangle").lpf(1500).attack(0.02).release(0.4).gain(0.45).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.3),
@@ -1389,10 +1625,90 @@ __CODE__
   $("hints-modal").addEventListener("click", e=>{
     if (e.target === $("hints-modal")) closeHintsModal();
   });
+
+  // ============= SHARE MODAL =============
+  // 三个二维码 (party/show/input) + 三个复制按钮. 只在有 SESSION_ID 时才有意义.
+  let __shareQrRendered = false;
+  function renderShareQR(canvasContainerId, url){
+    if (!window.QrCreator) return;
+    const wrap = document.getElementById(canvasContainerId);
+    if (!wrap) return;
+    wrap.innerHTML = "";  // 清空旧 canvas
+    QrCreator.render({
+      text: url,
+      radius: 0.0,
+      ecLevel: "H",         // 高纠错等级 — 中央 logo 遮挡 ~18% 仍可扫
+      fill: "#0a0b0e",
+      background: "#ffffff",
+      size: 360,
+    }, wrap);
+    const c = wrap.querySelector("canvas");
+    if (c) c.style.cssText = "width:100%;height:auto;display:block;image-rendering:pixelated";
+  }
+  function openShareModal(){
+    if (!SESSION_ID) return;
+    const partyUrl = `${location.origin}/s/${SESSION_ID}`;
+    const showUrl  = `${location.origin}/app/${SESSION_ID}?mode=show`;
+    const inputUrl = `${location.origin}/app/${SESSION_ID}?mode=input`;
+    $("share-url-party").value = partyUrl;
+    $("share-url-show").value  = showUrl;
+    $("share-url-input").value = inputUrl;
+    if (!__shareQrRendered){
+      // 等 qr-creator 加载后渲染 (如果 CDN 慢, 拖到第一次打开时才尝试)
+      if (window.QrCreator){
+        renderShareQR("share-qr-party", partyUrl);
+        renderShareQR("share-qr-show",  showUrl);
+        renderShareQR("share-qr-input", inputUrl);
+        __shareQrRendered = true;
+      } else {
+        // CDN 还没到, 5 秒内 polling
+        let tries = 0;
+        const t = setInterval(()=>{
+          if (window.QrCreator){
+            clearInterval(t);
+            renderShareQR("share-qr-party", partyUrl);
+            renderShareQR("share-qr-show",  showUrl);
+            renderShareQR("share-qr-input", inputUrl);
+            __shareQrRendered = true;
+          } else if (++tries > 25) {
+            clearInterval(t);
+          }
+        }, 200);
+      }
+    }
+    $("share-modal").style.display = "flex";
+  }
+  function closeShareModal(){ $("share-modal").style.display = "none"; }
+  // 点 PARTY badge 触发 share — 不需要专门的 SHARE 按钮 (handler 在 PARTY_MODE boot 那段)
+  $("share-close").addEventListener("click", closeShareModal);
+  $("share-modal").addEventListener("click", e=>{
+    if (e.target === $("share-modal")) closeShareModal();
+  });
+  // 复制按钮 — 用事件委托
+  $("share-modal").addEventListener("click", async e=>{
+    const btn = e.target.closest(".share-copy");
+    if (!btn) return;
+    const input = $(btn.dataset.target);
+    if (!input) return;
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch(_){
+      input.select(); document.execCommand("copy");
+    }
+    const orig = btn.textContent;
+    btn.textContent = (window.I18N && I18N.t) ? I18N.t("share.copied") : "✓ COPIED";
+    btn.classList.add("copied");
+    setTimeout(()=>{
+      btn.textContent = orig;
+      btn.classList.remove("copied");
+    }, 1400);
+  });
+
   // Esc 关闭任何打开的 modal
   document.addEventListener("keydown", e=>{
     if (e.key === "Escape"){
-      if ($("hints-modal").style.display !== "none") closeHintsModal();
+      if ($("share-modal").style.display !== "none") closeShareModal();
+      else if ($("hints-modal").style.display !== "none") closeHintsModal();
       else if ($("key-modal").style.display !== "none") closeKeyModal();
     }
   });
@@ -1485,7 +1801,7 @@ __CODE__
 stack(
   s("bd*4").bank("RolandTR909").gain(0.9),
   s("~ cp ~ cp").bank("RolandTR909").gain(0.55).room(0.25),
-  s("hh*8").bank("RolandTR909").gain(0.32).pan(sine.range(-0.3,0.3).slow(4)),
+  s("hh*8").bank("RolandTR909").gain(0.32).pan(sine.range(0.35,0.65).slow(4)),
   s("~ ~ ~ oh").bank("RolandTR909").gain(0.4).room(0.2),
   note("c2 c2 eb2 c2 c2 g1 c2 bb1").s("sawtooth").lpf(450).lpq(8).attack(0.01).release(0.22).gain(0.78),
   note("<c4 eb4 g4 bb4>").s("triangle").lpf(1500).attack(0.02).release(0.4).gain(0.42).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.3),
@@ -1506,7 +1822,7 @@ stack(
 stack(
   s("bd*4").gain(0.78).lpf(120),
   s("~ rim ~ rim").bank("RolandTR909").gain(0.45).room(0.5),
-  s("hh*8").gain(0.28).pan(sine.range(-0.3,0.3).slow(8)),
+  s("hh*8").gain(0.28).pan(sine.range(0.35,0.65).slow(8)),
   note("<f2 eb2 ab2 bb2>").s("sawtooth").lpf(400).lpq(4).attack(0.01).release(0.3).gain(0.7),
   note("<[f3,ab3,c4,eb4] [eb3,g3,bb3,d4] [ab3,c4,eb4,g4] [bb3,d4,f4,ab4]>/2").s("triangle").lpf(1600).attack(0.5).release(1.5).gain(0.32).room(0.6).delay(0.3).delaytime(0.5).delayfb(0.3)
 )` },
@@ -1515,7 +1831,7 @@ stack(
 stack(
   s("bd ~ ~ bd ~ ~ bd ~").gain(0.85),
   s("~ ~ sd ~ ~ ~ sd ~").gain(0.7).room(0.25),
-  s("hh*16").gain(0.22).pan(sine.range(-0.4,0.4).slow(2)),
+  s("hh*16").gain(0.22).pan(sine.range(0.3,0.7).slow(2)),
   s("~ ~ ~ ~ ~ oh ~ ~").bank("RolandTR909").gain(0.35),
   note("<a1 a1 e2 d2>").s("sawtooth").lpf(280).lpq(8).attack(0.005).release(0.35).gain(0.82),
   note("<[a3,c4,e4] [e3,g3,b3] [d3,f3,a3] [g3,b3,d4]>/2").s("triangle").lpf(1400).attack(0.04).release(0.4).gain(0.32).delay(0.4).delaytime(0.375).delayfb(0.4).room(0.4)
@@ -1525,7 +1841,7 @@ stack(
 stack(
   s("bd ~ ~ bd ~ ~ ~ bd").bank("RolandTR808").gain(0.78).lpf(160),
   s("~ ~ sd ~ ~ ~ sd ~").bank("RolandTR808").gain(0.55).room(0.45),
-  s("hh*8").gain(0.24).speed(0.95).pan(sine.range(-0.2,0.2).slow(4)),
+  s("hh*8").gain(0.24).speed(0.95).pan(sine.range(0.4,0.6).slow(4)),
   note("<c2 c2 g1 ab1>").s("sine").gain(0.7).attack(0.01).release(0.45).lpf(220),
   note("<[c4,eb4,g4,bb4] [d4,f4,ab4,c5] [bb3,d4,f4,ab4] [c4,eb4,g4,bb4]>/2").s("triangle").lpf(1400).attack(0.1).release(0.7).gain(0.32).room(0.5).delay(0.25).delaytime(0.5)
 )` },
@@ -1611,7 +1927,7 @@ stack(
 stack(
   s("bd*<1 2 1 4>").gain(0.78).sometimes(x=>x.crush(6)),
   s("<~ sd ~ ~> <~ ~ sd*2 ~>").gain(0.6).room(0.3).sometimes(x=>x.rev()),
-  s("hh*<8 16 4 12>").gain(0.26).pan(rand.range(-0.5,0.5)),
+  s("hh*<8 16 4 12>").gain(0.26).pan(rand.range(0.25,0.75)),
   note("<c2 ~ eb2 g1 ~ bb1 c2 ~>").s("square").lpf(rand.range(400, 1200)).lpq(6).attack(0.005).release(0.15).gain(0.55).sometimes(x=>x.crush(4)),
   note("<e4 ~ g4 ~ a4 ~ c5 ~>*2").s("triangle").lpf(1900).attack(0.02).release(0.3).gain(0.32).delay(0.5).delaytime(0.333).delayfb(0.5).every(3, x=>x.rev())
 )` },
@@ -1631,7 +1947,7 @@ stack(
 stack(
   s("bd*4").gain(0.92),
   s("~ ~ ~ ~ ~ cp ~ ~").gain(0.45).room(0.3),
-  s("hh*16").gain(0.22).pan(sine.range(-0.4,0.4).fast(2)),
+  s("hh*16").gain(0.22).pan(sine.range(0.3,0.7).fast(2)),
   s("~ oh ~ oh ~ oh ~ oh").bank("RolandTR909").gain(0.3),
   note("e1*8").s("sawtooth").lpf(sine.range(300,1600).slow(8)).lpq(10).attack(0.005).release(0.08).gain(0.62).struct("0 1 1 1 0 1 1 1"),
   note("<e3 g3 b3 a3 e3 g3 c4 b3>*2").s("triangle").lpf(1800).attack(0.02).release(0.2).gain(0.32).delay(0.4).delaytime(0.375).delayfb(0.5)
@@ -1660,7 +1976,7 @@ stack(
 stack(
   s("bd*4").bank("RolandTR909").gain(0.95).distort(0.5).shape(0.3),
   s("~ ~ sd ~").bank("RolandTR909").gain(0.7).distort(0.25),
-  s("hh*16").bank("RolandTR909").gain(0.26).pan(sine.range(-0.3,0.3).fast(2)),
+  s("hh*16").bank("RolandTR909").gain(0.26).pan(sine.range(0.35,0.65).fast(2)),
   s("~ ~ ~ oh ~ ~ oh ~").bank("RolandTR909").gain(0.4),
   note("c2*8").s("sawtooth").lpf(450).lpq(10).attack(0.005).release(0.07).gain(0.66).struct("1 0 1 1 1 0 1 1"),
   note("<eb4 g4 bb4 c5>*2").s("square").lpf(2200).attack(0.01).release(0.2).gain(0.4).delay(0.3).delaytime(0.375)
@@ -1670,7 +1986,7 @@ stack(
 stack(
   s("bd ~ ~ ~ bd ~ ~ ~").gain(0.85),
   s("~ ~ rim ~ ~ ~ rim ~").bank("RolandTR909").gain(0.5).room(0.4),
-  s("hh*8").gain(0.3).pan(sine.range(-0.3,0.3).slow(4)),
+  s("hh*8").gain(0.3).pan(sine.range(0.35,0.65).slow(4)),
   s("~ ~ ~ <~ cp> ~ ~ ~ <cp ~>").gain(0.42).room(0.3),
   note("<a1 a1 e2 d2>").s("sine").lpf(220).attack(0.01).release(0.45).gain(0.85),
   note("<[a3,c4,e4,g4] [d4,f4,a4,c5] [g3,b3,d4,f4] [c4,e4,g4,b4]>/2").s("triangle").lpf(2000).attack(0.05).release(1).gain(0.4).room(0.5),
@@ -1928,15 +2244,10 @@ stack(
     const badge = $("party-badge");
     badge.style.display = "inline-flex";
     $("party-id").textContent = SESSION_ID;
-    badge.addEventListener("click", async (e)=>{
+    // 点 PARTY badge 直接开 share modal (3 个 QR + 复制按钮, 比单 URL 复制更全)
+    badge.addEventListener("click", (e)=>{
       e.preventDefault();
-      try {
-        await navigator.clipboard.writeText(SESSION_URL);
-        badge.classList.add("copied");
-        const orig = $("party-id").textContent;
-        $("party-id").textContent = "✓ COPIED";
-        setTimeout(()=>{ badge.classList.remove("copied"); $("party-id").textContent = orig; }, 1400);
-      } catch(_){}
+      openShareModal();
     });
     log("sys", `🎉 PARTY 模式 · session ${SESSION_ID}`);
     log("sys", `   分享 ${SESSION_URL}`);

@@ -24,9 +24,19 @@
 
       // === Top bar ===
       "topbar.api_key":   "API KEY",
+      "topbar.share":     "SHARE",
       "party.label":      "PARTY",
+      "party.share_tip": "Click to share session",
       "mode.show":        "📺 SHOW",
       "mode.input":       "🎛 INPUT",
+
+      // === Share modal ===
+      "share.title":      "SHARE SESSION",
+      "share.party":      "PARTY · full client",
+      "share.show":       "SHOW · stage display",
+      "share.input":      "INPUT · audience input",
+      "share.copy":       "COPY",
+      "share.copied":     "✓ COPIED",
 
       // === Code panel ===
       "code.title":       "PATTERN · LIVE CODE",
@@ -152,9 +162,18 @@
       "led.fault":        "故障",
 
       "topbar.api_key":   "API 密钥",
+      "topbar.share":     "分享",
       "party.label":      "派对",
+      "party.share_tip": "点击分享 session",
       "mode.show":        "📺 显示",
       "mode.input":       "🎛 输入",
+
+      "share.title":      "分享 SESSION",
+      "share.party":      "完整端 · 演奏控制",
+      "share.show":       "演出端 · 仅看代码",
+      "share.input":      "观众端 · 文字输入",
+      "share.copy":       "复制",
+      "share.copied":     "✓ 已复制",
 
       "code.title":       "代码 · 实时模式",
       "code.run":         "▶ 执行",
@@ -273,9 +292,18 @@
       "led.fault":        "故障",
 
       "topbar.api_key":   "API キー",
+      "topbar.share":     "共有",
       "party.label":      "パーティ",
+      "party.share_tip": "クリックして共有",
       "mode.show":        "📺 表示",
       "mode.input":       "🎛 入力",
+
+      "share.title":      "セッションを共有",
+      "share.party":      "PARTY · フル操作",
+      "share.show":       "SHOW · 表示専用",
+      "share.input":      "INPUT · 観客入力",
+      "share.copy":       "コピー",
+      "share.copied":     "✓ コピー済",
 
       "code.title":       "パターン · ライブコード",
       "code.run":         "▶ 実行",
@@ -394,9 +422,18 @@
       "led.fault":        "ERREUR",
 
       "topbar.api_key":   "CLÉ API",
+      "topbar.share":     "PARTAGER",
       "party.label":      "PARTY",
+      "party.share_tip": "Cliquer pour partager",
       "mode.show":        "📺 SHOW",
       "mode.input":       "🎛 INPUT",
+
+      "share.title":      "PARTAGER LA SESSION",
+      "share.party":      "PARTY · contrôle complet",
+      "share.show":       "SHOW · affichage scène",
+      "share.input":      "INPUT · entrée du public",
+      "share.copy":       "COPIER",
+      "share.copied":     "✓ COPIÉ",
 
       "code.title":       "MOTIF · CODE EN DIRECT",
       "code.run":         "▶ LANCER",
