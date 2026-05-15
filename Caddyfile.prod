@@ -1,0 +1,48 @@
+# 生产 Caddyfile — 跑在容器内, 只监听 :80
+# 由外层 linkyun-nginx-proxy 把 vibe.linkyun.co 转发过来.
+:80 {
+    root * /srv/public
+
+    # === API 端点 — 转发到 fastify ===
+    handle /sessions {
+        reverse_proxy app:8080
+    }
+    handle /healthz {
+        reverse_proxy app:8080
+    }
+    handle /stats {
+        reverse_proxy app:8080
+    }
+
+    @session_action path_regexp ^/s/[a-zA-Z0-9_-]+/(code|text)$
+    handle @session_action {
+        reverse_proxy app:8080
+    }
+
+    # === 应用页面 ===
+    handle / {
+        rewrite * /landing.html
+        file_server
+    }
+    handle /app {
+        rewrite * /index.html
+        file_server
+    }
+    @session_view path_regexp ^/(s|app)/[a-zA-Z0-9_-]+$
+    handle @session_view {
+        rewrite * /index.html
+        file_server
+    }
+
+    # === 静态资源 ===
+    handle {
+        file_server
+    }
+
+    # === 缓存策略 ===
+    header Cache-Control "no-cache, must-revalidate"
+    @vendor path /vendor/*
+    header @vendor Cache-Control "public, max-age=86400"
+
+    encode gzip zstd
+}

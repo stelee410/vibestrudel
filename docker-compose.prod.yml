@@ -1,28 +1,38 @@
+# =====================================================
+# VibeStrudel 生产环境部署 — 用于 /opt/vibestrudel
+#
+# 与本地版的区别:
+# - caddy 不抢宿主 :80 (让现成的 linkyun-nginx-proxy 当总入口)
+# - caddy 用 expose 而不是 ports
+# - 加入外部 linkyun_default 网络让 nginx-proxy 找得到
+# - 没有 HTTPS — TLS 由外层做 (暂时是 plain HTTP, vibe.linkyun.co 没 TLS)
+# =====================================================
 services:
   redis:
     image: redis:7-alpine
+    container_name: vibe-redis
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     restart: unless-stopped
-    # 不挂卷 — 内存唯一,重启丢数据是预期(session ephemeral)
 
   app:
     build: ./server
+    container_name: vibe-app
     environment:
       - REDIS_URL=redis://redis:6379
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL:-}
       - MONTHLY_CAP_USD=${MONTHLY_CAP_USD:-30}
       - SESSION_TTL_SECONDS=${SESSION_TTL_SECONDS:-300}
       - GLOBAL_RATE_SECONDS=${GLOBAL_RATE_SECONDS:-15}
       - PER_IP_RATE_SECONDS=${PER_IP_RATE_SECONDS:-60}
       - SELF_RATE_SECONDS=${SELF_RATE_SECONDS:-5}
       - LLM_MAX_RETRY=${LLM_MAX_RETRY:-1}
-      - CORS_ORIGIN=${CORS_ORIGIN:-https://vibe.linkyun.co}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://vibe.linkyun.co}
       - PORT=8080
       - NODE_ENV=production
       - MANIFEST_DIR=/app/manifests
     volumes:
-      # 把 manifest JSON 挂进去给校验器查 sample/bank 名
       - ./vendor/samples/dirt-samples/strudel.json:/app/manifests/dirt-samples.strudel.json:ro
       - ./vendor/samples/tidal-drum-machines.json:/app/manifests/tidal-drum-machines.json:ro
       - ./vendor/samples/piano.json:/app/manifests/piano.json:ro
@@ -33,12 +43,12 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
+    container_name: vibe-caddy
+    # 不暴露给宿主, 只对 docker 网络可见 — 外层 linkyun-nginx-proxy 走 docker DNS 找过来
+    expose:
+      - "80"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      # 静态文件: 只把需要对外暴露的几项挂进 /srv/public 里
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - ./index.html:/srv/public/index.html:ro
       - ./landing.html:/srv/public/landing.html:ro
       - ./themes:/srv/public/themes:ro
@@ -48,7 +58,14 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+    networks:
+      - default
+      - linkyun_default     # 让外层 nginx-proxy 能找到这个容器
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  linkyun_default:
+    external: true
