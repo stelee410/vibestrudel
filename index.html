@@ -17,8 +17,9 @@
   window.__BUNDLE_VER = "__BUNDLE_VER__";
   if (window.__APP_VER === "__" + "BUILD_TS__") window.__APP_VER = String(Date.now());
   if (window.__BUNDLE_VER === "__" + "BUNDLE_VER__") window.__BUNDLE_VER = "dev";
-  // 1) CSS 带 version 强制 fresh
-  document.write('<link rel="stylesheet" href="/themes/default.css?v=' + window.__APP_VER + '">');
+  // 1) CSS 带 version 强制 fresh；file:// 预览时使用相对路径
+  window.__ASSET_BASE = location.protocol === "file:" ? "." : "";
+  document.write('<link rel="stylesheet" href="' + window.__ASSET_BASE + '/themes/default.css?v=' + window.__APP_VER + '">');
   // 1.5) 屏蔽 superdough 1.3.0 的 onceEnded 自嗨 deprecation 警告
   // 它通过 console.log 打, 上游 @strudel/web@1.3.0 还没修(自己旧代码用 node.onended,
   // 自己又警告自己应该用 onceEnded helper). 等上游修好这段补丁就可以删.
@@ -30,10 +31,11 @@
       return origLog.apply(console, arguments);
     };
   })();
-  // 2) 模式检测 (?mode=show|input)
+  // 2) 模式检测 (?mode=show|input|control) 或 /control/:id
   (function(){
     var m = new URLSearchParams(location.search).get("mode");
-    if (m === "show" || m === "input"){
+    if (location.pathname === "/control" || /^\/control\/[a-zA-Z0-9_-]{6,20}$/.test(location.pathname)) m = "control";
+    if (m === "show" || m === "input" || m === "control"){
       document.documentElement.classList.add("mode-" + m);
       document.addEventListener("DOMContentLoaded", function(){
         document.body.classList.add("mode-" + m);
@@ -41,7 +43,7 @@
     }
   })();
 </script>
-<script>document.write('<script src="/themes/i18n.js?v=' + window.__APP_VER + '"><\/script>');</script>
+<script>document.write('<script src="' + window.__ASSET_BASE + '/themes/i18n.js?v=' + window.__APP_VER + '"><\/script>');</script>
 <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
 </head>
 <body>
@@ -70,6 +72,7 @@
       <a class="party-badge" id="party-badge" style="display:none" title="点击分享 session" data-i18n-attr="title:party.share_tip"><span class="party-dot"></span><span data-i18n="party.label">PARTY</span><span class="party-id" id="party-id"></span></a>
       <span class="mode-badge mode-show-only" data-i18n="mode.show">📺 SHOW</span>
       <span class="mode-badge mode-input-only" data-i18n="mode.input">🎛 INPUT</span>
+      <span class="mode-badge mode-control-only" data-i18n="mode.control">✦ CONTROL</span>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -122,6 +125,31 @@
       </div>
     </section>
 
+    <!-- CONTROL: no-code visual preset controller -->
+    <section class="panel" id="control-panel">
+      <span class="screw tl"></span><span class="screw tr"></span>
+      <span class="screw bl"></span><span class="screw br"></span>
+      <div class="control-shell">
+        <div class="control-hero">
+          <div>
+            <div class="control-kicker">CONTROL · VIBE DROPS</div>
+            <h2>选一个感觉，让音乐往那边走</h2>
+            <p>每次随机掉落 9 个 preset。它们不是代码，也不是专业术语，只是情绪、画面和想法。</p>
+          </div>
+          <div class="control-actions">
+            <button class="control-icon-btn" id="control-share-btn" title="分享控制页" aria-label="分享控制页">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7 15.4 6.3"/><path d="M8.6 13.3 15.4 17.7"/></svg>
+            </button>
+            <button class="control-icon-btn" id="control-dice" title="换一组" aria-label="换一组">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="16" cy="16" r="1"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="control-status" id="control-status">点一张卡片发送到 session</div>
+        <div class="control-grid" id="control-grid"></div>
+      </div>
+    </section>
+
     <!-- PRESET BANK -->
     <section class="panel preset-rack">
       <span class="screw tl"></span><span class="screw tr"></span>
@@ -169,6 +197,40 @@
     </div>
     <span class="screw tr"></span><span class="screw br"></span>
   </footer>
+</div>
+
+<!-- ============== CONTROL SHARE MODAL ============== -->
+<div class="modal-bg control-share-bg" id="control-share-modal" style="display:none">
+  <div class="control-share-sheet">
+    <button class="modal-close control-share-close" id="control-share-close" title="关闭 (Esc)">×</button>
+    <div class="control-share-kicker">SHARE · CONTROL</div>
+    <h2>分享控制页</h2>
+    <div class="control-qr-frame">
+      <div class="control-qr-corners" aria-hidden="true"></div>
+      <div class="control-qr-canvas" id="control-qr"><canvas></canvas></div>
+      <div class="control-qr-logo" aria-hidden="true"><span>V//S</span></div>
+    </div>
+    <div class="control-qr-caption">扫码进入 CONTROL</div>
+    <div class="control-share-url-row">
+      <input type="text" class="control-share-url" id="control-share-url" readonly />
+      <button class="control-share-copy" id="control-share-copy">复制</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== CONTROL SESSION MODAL ============== -->
+<div class="modal-bg control-share-bg" id="control-session-modal" style="display:none">
+  <div class="control-share-sheet control-session-sheet">
+    <button class="modal-close control-share-close" id="control-session-close" title="关闭 (Esc)">×</button>
+    <div class="control-share-kicker">SESSION · UUID</div>
+    <h2>输入房间 UUID</h2>
+    <p class="control-session-hint">控制页需要连接到一个 session。也可以直接打开 /control/UUID。</p>
+    <div class="control-session-row">
+      <input type="text" class="control-session-input" id="control-session-input" placeholder="例如 aB3xY7Kp" autocomplete="off" />
+      <button class="control-share-copy" id="control-session-go">进入</button>
+    </div>
+    <div class="control-session-error" id="control-session-error"></div>
+  </div>
 </div>
 
 <!-- ============== LLM SETTINGS MODAL ============== -->
@@ -281,15 +343,15 @@
           <button class="share-copy" data-target="share-url-show" data-i18n="share.copy">COPY</button>
         </div>
       </div>
-      <div class="share-card" data-mode="input">
-        <div class="share-label" data-i18n="share.input">INPUT · 观众输入端</div>
+      <div class="share-card" data-mode="control">
+        <div class="share-label" data-i18n="share.control">CONTROL · 观众控制端</div>
         <div class="share-qr">
-          <div class="share-qr-canvas" id="share-qr-input"><canvas></canvas></div>
+          <div class="share-qr-canvas" id="share-qr-control"><canvas></canvas></div>
           <div class="qr-logo"></div>
         </div>
         <div class="share-url-row">
-          <input type="text" class="share-url" id="share-url-input" readonly>
-          <button class="share-copy" data-target="share-url-input" data-i18n="share.copy">COPY</button>
+          <input type="text" class="share-url" id="share-url-control" readonly>
+          <button class="share-copy" data-target="share-url-control" data-i18n="share.copy">COPY</button>
         </div>
       </div>
     </div>
@@ -302,16 +364,17 @@
 <!-- ============== STRUDEL ============== -->
 <script type="module">
   // 每个 manifest 都有 local 和 remote 两套源,按用户偏好选择
+  const ASSET_BASE = window.__ASSET_BASE || "";
   const SAMPLE_MANIFESTS = [
-    { name: "dirt-samples",        local: "/vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
-    { name: "tidal-drum-machines", local: "/vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
-    { name: "piano",               local: "/vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
+    { name: "dirt-samples",        local: ASSET_BASE + "/vendor/samples/dirt-samples/strudel.json", remote: "https://cdn.jsdelivr.net/gh/tidalcycles/dirt-samples@master/strudel.json" },
+    { name: "tidal-drum-machines", local: ASSET_BASE + "/vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
+    { name: "piano",               local: ASSET_BASE + "/vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
     // VCSL 2.4GB 太大不打包, 始终走官方 CDN (服务端仍读本地 manifest 做 bank/sound 校验)
     { name: "vcsl",                local: null,                                        remote: "https://strudel.b-cdn.net/vcsl.json" },
   ];
   // 本地 bundle 已经把 @strudel/draw 一起打包,视觉链式方法 (.pianoroll/.scope 等) 全部可用
   // bundle 用 sha256 短指纹做版本 — 内容没变就不变, 浏览器走 24h 缓存不重下 1.2MB.
-  const ENGINE_LOCAL  = "/vendor/strudel/index.mjs?v=" + (window.__BUNDLE_VER || "dev");
+  const ENGINE_LOCAL  = ASSET_BASE + "/vendor/strudel/index.mjs?v=" + (window.__BUNDLE_VER || "dev");
   const ENGINE_REMOTE = "https://esm.sh/@strudel/web@1.3.0";
 
   // 读偏好: "auto"(默认) | "local" | "remote"
@@ -446,6 +509,10 @@
   const bpmReadout  = $("bpm-readout");
   const bpmDown     = $("bpm-down");
   const bpmUp       = $("bpm-up");
+  const controlGrid = $("control-grid");
+  const controlDice = $("control-dice");
+  const controlShareBtn = $("control-share-btn");
+  const controlStatus = $("control-status");
   const ledAi       = $("led-ai");
   const ledAudio    = $("led-audio");
   const ledErr      = $("led-err");
@@ -500,10 +567,13 @@
   };
 
   // ---------- Party mode (live session) ----------
-  // URL  /s/<id>  或  /app/<id>  → party 模式; 其他 → solo
-  const PARTY_MATCH = location.pathname.match(/^\/(s|app)\/([a-zA-Z0-9_-]{6,20})$/);
-  const PARTY_MODE  = !!PARTY_MATCH;
-  const SESSION_ID  = PARTY_MATCH ? PARTY_MATCH[2] : null;
+  // URL  /s/<id> /app/<id> /control/<id> → party 模式; 其他 → solo
+  const PARTY_MATCH = location.pathname.match(/^\/(s|app|control)\/([a-zA-Z0-9_-]{6,20})$/);
+  const CONTROL_URL_PARAMS = new URLSearchParams(location.search);
+  const CONTROL_QUERY_ID = CONTROL_URL_PARAMS.get("uuid") || CONTROL_URL_PARAMS.get("session") || CONTROL_URL_PARAMS.get("id") || "";
+  const CONTROL_QUERY_MATCH = location.pathname === "/control" && /^[a-zA-Z0-9_-]{6,20}$/.test(CONTROL_QUERY_ID);
+  const PARTY_MODE  = !!PARTY_MATCH || CONTROL_QUERY_MATCH;
+  const SESSION_ID  = PARTY_MATCH ? PARTY_MATCH[2] : (CONTROL_QUERY_MATCH ? CONTROL_QUERY_ID : null);
   const SESSION_URL = PARTY_MODE ? `${location.origin}/s/${SESSION_ID}` : null;
   const party = { lastSeq: -1, pollTimer: null, lastInteraction: Date.now() };
 
@@ -1353,8 +1423,11 @@ __CODE__
     }
   }
 
-  // INPUT 模式: 客户端只是控制器, 不播放音频
-  const IS_INPUT_MODE = new URLSearchParams(location.search).get("mode") === "input";
+  // 控制器模式: 客户端只是控制器, 不播放音频
+  const urlMode = new URLSearchParams(location.search).get("mode");
+  const IS_INPUT_MODE = urlMode === "input";
+  const IS_CONTROL_MODE = urlMode === "control" || location.pathname === "/control" || /^\/control\/[a-zA-Z0-9_-]{6,20}$/.test(location.pathname);
+  const IS_CONTROLLER_MODE = IS_INPUT_MODE || IS_CONTROL_MODE;
 
   async function pollSession(){
     if (!PARTY_MODE) return;
@@ -1381,8 +1454,8 @@ __CODE__
             } else {
               log("sys", `↳ 加载现有 session 状态 (seq ${data.seq})`);
             }
-            // INPUT 模式只显示日志, 不播放 — 这是控制器, 不是 audio 输出端
-            if (!IS_INPUT_MODE){
+            // 控制器模式只显示状态/日志, 不播放 — 这是控制器, 不是 audio 输出端
+            if (!IS_CONTROLLER_MODE){
               setCode(data.code);
               try { await evaluatePattern(data.code); } catch(_){}
             }
@@ -1590,6 +1663,244 @@ __CODE__
     ]},
   ];
 
+  const CONTROL_PRESETS = [
+    ["深夜开车","霓虹、长路、低频贴着地面滑行","让音乐像深夜开车: 稳定低频,霓虹感合成器,中速律动,不要太满","夜行","中速","◆","#67e3ff"],
+    ["雨后街道","湿润、反光、脚步慢下来","做成雨后街道的感觉: 柔和鼓点,温暖电钢琴,细碎高频像雨滴,空间感大一点","潮湿","柔和","☂","#75baff"],
+    ["慢慢升温","不急,但能感觉能量在堆起来","让现有音乐慢慢升温: 增加层次和密度,hi-hat 逐渐活跃,filter 慢慢打开","推进","渐强","▲","#ffb347"],
+    ["突然起飞","从地面一下进入空中","做一个突然起飞的变化: 加亮的 lead 和更强鼓组,低频更有推力,整体更开阔","爆发","明亮","✦","#ff6b35"],
+    ["一点危险","好像快要失控,但还稳着","让音乐多一点危险感: 小二度/不安和声,轻微失真,金属打击,低频保持稳定","紧张","暗色","!","#ff4d6d"],
+    ["漂在水面","没有重量,边界模糊","让它像漂在水面: 去掉硬攻击,长 pad,慢速旋律,大量 room 和 delay","漂浮","慢","≈","#7cffb6"],
+    ["城市醒来","清晨、人群、第一束光","做城市醒来的感觉: 从稀疏到明亮,加入温暖和弦和轻快节奏,不要太吵","清晨","温暖","☼","#ffd58e"],
+    ["地下室派对","暗、热、身体贴近音箱","做地下室派对: 干脆四四拍,厚 kick,短 bass,少旋律,鼓组更肉","俱乐部","重低音","■","#c876e8"],
+    ["海边日落","暖风、橘色、松弛地摇","让音乐像海边日落: 温暖和弦,轻松律动,柔和 bass,一点点复古感","松弛","暖","◒","#ff8a4d"],
+    ["月球漫步","低重力,步子很慢","做月球漫步感: 稀疏鼓,sub drone,冷色合成器,大量空间,节奏有空隙","太空","稀疏","◌","#9bb7ff"],
+    ["玻璃森林","透明、脆、闪闪发亮","让音乐像玻璃森林: 清脆 bell/kalimba 质感,高频闪烁,底部保持柔软","晶莹","高频","◇","#67e3ff"],
+    ["机器人跳舞","机械但可爱,卡点明确","做机器人跳舞: quantized 节奏,短促 synth stab,方波 bass,有趣但别幼稚","机械","跳跃","▣","#7aa2ff"],
+    ["旧录像带","褪色、温暖、有颗粒","让音乐像旧录像带: lo-fi 颗粒,轻微 wow/flutter,LPF 柔化,复古鼓机","复古","颗粒","▤","#ffb347"],
+    ["空房间回声","声音离你很远","做空房间回声: 声部减少,room 变大,delay 长尾,鼓点更远更轻","空旷","回声","⌁","#75baff"],
+    ["心跳加快","越来越紧张,呼吸变短","让音乐像心跳加快: kick/bass 更密,hat 推动,和声更紧,逐步 build up","紧迫","加速","♥","#ff4d6d"],
+    ["柔软云层","干净、白、很轻","做柔软云层: 去掉攻击性,加入长 pad 和轻铃音,慢速,明亮但不刺耳","治愈","轻","☁","#e6e6e8"],
+    ["赛博寺庙","未来感和仪式感同时存在","让音乐像赛博寺庙: 深 drone,钟声/金属音,缓慢庄严节奏,电子低频","仪式","未来","⌬","#c876e8"],
+    ["公路追逐","速度、轮胎、危险转弯","做公路追逐: 更快 BPM 或双倍感,滚动 bass,紧密鼓组,短促 lead","高速","刺激","▶","#ff6b35"],
+    ["迷路花园","漂亮,但方向感不确定","让音乐像迷路花园: 旋律绕行,和声梦幻,节奏轻,偶尔出现意外音","梦幻","蜿蜒","✽","#7cffb6"],
+    ["冷空气","清晰、锐利、距离感","做冷空气: 减少低中频浑浊,加入冷色 pad,清脆 percussion,空间拉远","冷","清晰","❄","#67e3ff"],
+    ["热带电流","湿热、彩色、律动明显","让音乐有热带电流: percussion 更活,明亮 chord stab,弹性 bass,轻微 syncopation","热带","律动","~","#7cffb6"],
+    ["黑白电影","优雅、克制、有一点忧伤","做黑白电影感: jazz 小调和弦,刷子般轻鼓,低速,复古电钢琴","优雅","忧伤","◐","#b8bcc6"],
+    ["工业电梯","金属、重复、压迫","让音乐像工业电梯: 重复机械节奏,金属噪声,低频压迫,少旋律","工业","压迫","▥","#8a8f99"],
+    ["烟雾散开","从浑浊慢慢变清楚","做烟雾散开的变化: 先暗和低通,再逐步打开高频与旋律,层次变清晰","展开","滤波","☰","#9bb7ff"],
+    ["小小胜利","开心但不俗气","让音乐有小小胜利感: 大调倾向,明亮 lead,鼓更轻快,保留电子质感","积极","明亮","✓","#7cffb6"],
+    ["孤独卫星","重复发送信号,没人回应","做孤独卫星: 简单重复动机,稀疏 ping,宽空间,低频很克制","孤独","太空","◎","#75baff"],
+    ["梦里奔跑","速度存在,但脚不着地","让音乐像梦里奔跑: 快速 arpeggio,柔软 pad,鼓不要太硬,有漂移感","梦境","流动","∞","#c876e8"],
+    ["暴雨来临","天色压下来,风变大","做暴雨来临: 低频 drone,滚动 tom/snare,暗色 pad,逐渐增加噪声和密度","压迫","渐强","≋","#4f83ff"],
+    ["阳台微风","亲近、松弛、有人味","让音乐像阳台微风: lo-fi 鼓,温暖和弦,轻 bass,旋律简单舒服","松弛","亲密","⌒","#ffd58e"],
+    ["未知信号","像收到外星电台","做未知信号: bleeps,短促 FM 音色,不规则节奏,但主 groove 仍稳定","异星","碎片","⌁","#67e3ff"],
+    ["凌晨三点","清醒、空、带一点脆弱","让音乐像凌晨三点: 低速,少鼓,柔和小调和声,远处的高频点缀","脆弱","深夜","⋯","#75baff"],
+    ["地铁进站","规律、风压、灯光扫过","做地铁进站: 稳定脉冲,噪声 sweep,短 bass pattern,节奏像轨道","城市","脉冲","▭","#8a8f99"],
+    ["篝火旁边","温暖、围坐、微微摇晃","让音乐像篝火旁边: 木质 percussion,温暖 pad/chord,中慢速摇摆","温暖","摇摆","△","#ff8a4d"],
+    ["镜子迷宫","重复、反射、方向错乱","做镜子迷宫: delay 反射,短 motif 重复变形,pan 左右移动,节奏稳定","反射","迷幻","◇","#c876e8"],
+    ["冰面滑行","顺滑、冷、速度很平","让音乐像冰面滑行: 平滑 bass,冷色 lead,少量 reverb,节奏直线推进","顺滑","冷色","━","#67e3ff"],
+    ["开心失控","兴奋、乱一点、但能跳","做开心失控: 加快节奏,增加彩色打击乐和 lead,保留清晰 kick","兴奋","高能","✹","#ffb347"],
+    ["低空飞行","贴地、有速度、有压迫","让音乐像低空飞行: 强 sub,滚动 bassline,短促鼓组,暗色空间","推进","低频","▰","#ff6b35"],
+    ["糖果故障","甜,但电子故障闪一下","做糖果故障: 明亮可爱旋律,glitch percussion,bitcrush 少量,节奏活泼","甜","glitch","✕","#ff85c1"],
+    ["远山回声","辽阔、安静、慢慢回应","让音乐像远山回声: 长 reverb,慢 pad,少量钟声,旋律留白","辽阔","慢","⌃","#7cffb6"],
+    ["红色警报","紧急,不能再拖","做红色警报: 紧张 siren-like lead,强 kick,快速 hat,短 build up","警报","强烈","●","#ff4d6d"],
+    ["蓝色隧道","冷光、重复、一直向前","让音乐像蓝色隧道: hypnotic techno,重复 bass,冷色 stab,稳定推进","催眠","冷光","▱","#75baff"],
+    ["纸灯笼","轻、暖、慢慢摆动","做纸灯笼: 温柔 pentatonic 旋律,软 pad,轻 percussion,空间温暖","东方","温柔","◍","#ffd58e"],
+    ["数据瀑布","信息流一直落下来","让音乐像数据瀑布: 快速粒子音,arpeggio 下行,清晰数字感,底鼓稳定","数字","流动","▦","#67e3ff"],
+    ["灰尘阳光","旧房间里一束光","做灰尘阳光: dusty lo-fi,温暖电钢琴,轻鼓,高频有颗粒","怀旧","温暖","☼","#ffb347"],
+    ["黑洞边缘","巨大、慢、危险","让音乐像黑洞边缘: 极深 sub,慢速重拍,空间巨大,旋律很少","巨大","黑暗","◉","#c876e8"],
+    ["人群推着走","被节奏裹挟,停不下来","做人群推着走: groove 更密,percussion 更前,call-and-response 小片段","人群","律动","»","#ff6b35"],
+    ["水晶洞穴","空灵、折射、发光","让音乐像水晶洞穴: bell-like 音色,长尾混响,慢 arpeggio,低频轻","空灵","发光","✧","#67e3ff"],
+    ["沙漠夜晚","干、宽、星星很多","做沙漠夜晚: 干燥 percussion,宽 pad,中慢速,旋律带一点神秘小调","辽阔","干燥","⋆","#ffb347"],
+    ["机场清晨","等待、广播、移动的人","让音乐像机场清晨: soft pulse,轻微公告感 sample/vocal chop,干净 pad","等待","移动","⌲","#9bb7ff"],
+    ["旧游戏厅","像素灯、投币、兴奋","做旧游戏厅: chiptune lead,方波 bass,活泼节奏,一点 bitcrush","像素","活泼","▧","#7aa2ff"],
+    ["雾中航行","看不清,但船在前进","让音乐像雾中航行: 低通 pad,缓慢 bass pulse,远处铃声,鼓很轻","朦胧","前进","∿","#75baff"],
+    ["秘密行动","低调、精准、带悬念","做秘密行动: muted bass,轻 percussion,短促暗色 motif,节奏克制","潜行","精准","⌖","#8a8f99"],
+    ["烟花之前","空气安静,马上爆开","让音乐像烟花之前: tension build,渐密 snare/hat,高频上升,最后准备 drop","等待","爆发前","✺","#ff85c1"],
+    ["极简黑线","只保留必要的脉冲","做极简黑线: minimal techno,少声部,清晰 kick/bass,小变化循环","极简","干净","─","#e6e6e8"],
+    ["温柔失眠","睡不着,但不痛苦","让音乐像温柔失眠: 慢速,柔和小调,轻微噪声,旋律像自言自语","失眠","柔和","◔","#75baff"],
+    ["太阳爆开","大、亮、热浪扑面","做太阳爆开: 明亮和弦,强烈开阔 lead,鼓更大,能量直接释放","释放","高亮","✷","#ffb347"],
+    ["机械心脏","冷机器里有情绪","让音乐像机械心脏: 机械 pulse 加温暖和弦,硬鼓和软 pad 对比","机械","情绪","◆","#c876e8"],
+    ["水下俱乐部","闷、深、灯在水里晃","做水下俱乐部: 低通鼓组,深 sub,晃动 pad,中速 club groove","水下","低通","≈","#67e3ff"],
+    ["山顶日出","慢慢亮起来,视野打开","让音乐像山顶日出: 从暗 pad 到明亮和弦,逐步加入轻节奏","开阔","渐亮","☉","#ffd58e"],
+    ["断电瞬间","突然空掉,只剩余波","做断电瞬间: 减少声部,做短暂停顿/稀疏,留下 reverb tail 和远处脉冲","停顿","余波","⏚","#8a8f99"],
+    ["霓虹市场","热闹、彩色、很多小声音","让音乐像霓虹市场: 多层 percussion,短采样切片,彩色 lead,groove 活","热闹","彩色","✣","#ff85c1"],
+    ["走进雾里","越走越软,边缘消失","做走进雾里: 高频收起来,room 增大,鼓变远,旋律更模糊","柔化","朦胧","◌","#9bb7ff"],
+    ["地下河流","看不见但一直流动","让音乐像地下河流: 深色 rolling bass,暗 pad,稳定但隐蔽的节奏","暗流","滚动","∽","#7cffb6"],
+    ["星际电梯","垂直上升,越来越轻","做星际电梯: upward arpeggio,filter 打开,低频逐渐减少,空间变大","上升","太空","⇧","#67e3ff"],
+    ["坏天气舞曲","外面很糟,里面在跳","让音乐像坏天气舞曲: 暗色 house/techno,强 groove,雨噪质感,温暖低频","阴天","跳舞","☔","#4f83ff"],
+    ["白色房间","干净、明亮、没有杂物","做白色房间: 清洁 mix,少量声部,明亮 pad,鼓点克制清楚","干净","明亮","□","#e6e6e8"],
+    ["废墟开花","破碎里有生命力","让音乐像废墟开花: 工业噪声底色上加入温暖旋律,从暗到亮","希望","破碎","✿","#7cffb6"],
+    ["午夜电台","低保真,有人在远处说话","做午夜电台: lo-fi radio texture,轻 vocal chop,暖和弦,慢 groove","电台","lo-fi","◍","#ffb347"],
+    ["隧道尽头","一直重复,最后看到光","让音乐像隧道尽头: 重复 hypnotic pattern,逐渐加入明亮元素,最后打开","希望","推进","◎","#ffd58e"],
+    ["黑色丝绸","暗、顺滑、性感但克制","做黑色丝绸: smooth dark groove,软 bass,少量 breathy texture,节奏克制","顺滑","暗","▰","#c876e8"],
+    ["儿童梦境","天真、怪、颜色很饱和","让音乐像儿童梦境: 简单明亮旋律,玩具感音色,意外转调,不要吵","童真","奇怪","☻","#ff85c1"],
+    ["悬崖边跳舞","刺激,但脚下很稳","做悬崖边跳舞: 强稳定 kick,紧张和声,边缘化 noise sweep,能跳","刺激","稳定","▲","#ff4d6d"],
+    ["森林深呼吸","有机、缓慢、空气新鲜","让音乐像森林深呼吸: 木质打击,自然起伏 pad,慢速,低频柔和","自然","呼吸","☘","#7cffb6"],
+    ["银色机器","精密、闪亮、冷静","做银色机器: 精准 electronic percussion,冷色 FM lead,干净 bass,无过多混响","精密","冷静","◫","#b8bcc6"],
+    ["粉色黄昏","甜、软、舍不得结束","让音乐像粉色黄昏: 温柔大七和弦,软 lead,慢摇 groove,尾音长","浪漫","柔软","◑","#ff85c1"],
+    ["铁轨尽头","重复到远方,带一点宿命","做铁轨尽头: 规律脉冲,低频火车感,小调 motif 重复变化,空间拉长","重复","远方","═","#8a8f99"],
+    ["房间变大","同样的音乐,空间突然扩张","让现有音乐空间变大: 增加 room/delay,声像更宽,低频保持居中清楚","空间","扩张","⟐","#75baff"],
+    ["只剩心跳","把复杂度降到身体本能","把音乐简化到只剩心跳般的 kick/sub 和少量空气感,其他声部退出","简化","身体","♥","#ff4d6d"],
+    ["最后一束光","像结束前的漂亮回望","做最后一束光: 声部逐层减少,留下明亮和弦/旋律尾巴,温柔收尾","收尾","温柔","☉","#ffd58e"],
+    ["窗外下雪","世界变安静,声音也变轻","让音乐像窗外下雪: 慢速,柔软 pad,细小高频像雪粒,鼓点稀疏且很轻","安静","冬天","✻","#e6e6e8"],
+    ["完全换景","不要修饰,直接去另一个地方","完全重来,生成一个新的方向: 保留当前 BPM 附近,但情绪和音色都换成全新场景","重来","换景","↻","#ff6b35"],
+  ].map(([label, desc, q, tag1, tag2, glyph, color], i) => ({
+    id: `control-${String(i + 1).padStart(2, "0")}`,
+    label, desc, q, tags: [tag1, tag2], glyph, color,
+    icon: `${window.__ASSET_BASE || ""}/assets/control-icons/control-${String(i + 1).padStart(2, "0")}.svg?v=${window.__APP_VER || "dev"}`,
+    image2: `square minimal tactile music-control icon for "${label}", ${desc}, dark hardware UI, bold simple silhouette, no text`,
+  }));
+
+  let controlDeck = [];
+  function sampleControlPresets(){
+    const pool = [...CONTROL_PRESETS];
+    for (let i = pool.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 9);
+  }
+  function setControlStatus(text, cls=""){
+    if (!controlStatus) return;
+    controlStatus.className = `control-status ${cls}`.trim();
+    controlStatus.textContent = text;
+  }
+  function renderControlDeck(){
+    if (!controlGrid) return;
+    controlDeck = sampleControlPresets();
+    controlGrid.innerHTML = "";
+    for (const item of controlDeck){
+      const b = document.createElement("button");
+      b.className = "control-card";
+      b.type = "button";
+      b.style.setProperty("--card-accent", item.color);
+      b.dataset.preset = item.id;
+      b.dataset.image2 = item.image2;
+      b.innerHTML = `
+        <span class="control-icon" data-glyph="${item.glyph}">
+          <img src="${item.icon}" alt="" loading="lazy" decoding="async">
+        </span>
+        <span class="control-copy">
+          <span class="control-label">${item.label}</span>
+          <span class="control-desc">${item.desc}</span>
+          <span class="control-tags">${item.tags.map(t => `<span class="control-tag">${t}</span>`).join("")}</span>
+        </span>`;
+      b.addEventListener("click", async ()=>{
+        if (state.busy) return;
+        if (IS_CONTROL_MODE && !SESSION_ID){
+          setControlStatus("请输入 session UUID 后再发送", "busy");
+          openControlSessionModal();
+          return;
+        }
+        if (!PARTY_MODE && !llmCurrentKey()){
+          setControlStatus("单机控制需要先设置 API Key", "busy");
+          openKeyModal();
+          return;
+        }
+        setControlStatus(`发送: ${item.label}`, "busy");
+        controlGrid.querySelectorAll(".control-card").forEach(x => x.disabled = true);
+        try {
+          await sendInstruction(item.q);
+          setControlStatus(`已发送: ${item.label}`, "ok");
+        } finally {
+          controlGrid.querySelectorAll(".control-card").forEach(x => x.disabled = false);
+        }
+      });
+      controlGrid.appendChild(b);
+    }
+    setControlStatus("随机掉落 9 个 preset · 点卡片发送 · 点骰子换一组");
+  }
+  if (controlDice){
+    controlDice.addEventListener("click", ()=>{
+      controlDice.classList.remove("spin");
+      void controlDice.offsetWidth;
+      controlDice.classList.add("spin");
+      renderControlDeck();
+    });
+  }
+  renderControlDeck();
+
+  function isValidSessionId(id){
+    return /^[a-zA-Z0-9_-]{6,20}$/.test(id || "");
+  }
+  function openControlSessionModal(){
+    const modal = $("control-session-modal");
+    const input = $("control-session-input");
+    $("control-session-error").textContent = "";
+    input.value = CONTROL_QUERY_ID || "";
+    modal.style.display = "flex";
+    setTimeout(()=>input.focus(), 30);
+  }
+  function closeControlSessionModal(){ $("control-session-modal").style.display = "none"; }
+  function goControlSession(){
+    const id = $("control-session-input").value.trim();
+    if (!isValidSessionId(id)){
+      $("control-session-error").textContent = "UUID 需要是 6-20 位字母、数字、下划线或短横线";
+      return;
+    }
+    location.href = `${location.origin}/control/${encodeURIComponent(id)}`;
+  }
+  $("control-session-close").addEventListener("click", closeControlSessionModal);
+  $("control-session-go").addEventListener("click", goControlSession);
+  $("control-session-input").addEventListener("keydown", e=>{
+    if (e.key === "Enter") goControlSession();
+  });
+  $("control-session-modal").addEventListener("click", e=>{
+    if (e.target === $("control-session-modal")) closeControlSessionModal();
+  });
+
+  let __controlQrRenderedFor = "";
+  function currentControlShareUrl(){
+    if (SESSION_ID) return `${location.origin}/control/${SESSION_ID}`;
+    if (CONTROL_QUERY_MATCH) return `${location.origin}/control/${CONTROL_QUERY_ID}`;
+    if (location.protocol === "file:") return `${location.href.split("#")[0].split("?")[0]}?mode=control`;
+    return `${location.origin}/control`;
+  }
+  function renderControlQR(url){
+    const wrap = $("control-qr");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    if (window.QrCreator){
+      QrCreator.render({
+        text: url,
+        radius: 0.18,
+        ecLevel: "H",
+        fill: "#071014",
+        background: "#f6fbff",
+        size: 420,
+      }, wrap);
+      const c = wrap.querySelector("canvas");
+      if (c) c.style.cssText = "width:100%;height:100%;display:block;image-rendering:pixelated";
+    } else {
+      wrap.innerHTML = '<div class="control-qr-fallback">QR</div>';
+    }
+  }
+  function openControlShareModal(){
+    const url = currentControlShareUrl();
+    $("control-share-url").value = url;
+    if (__controlQrRenderedFor !== url){
+      renderControlQR(url);
+      __controlQrRenderedFor = url;
+    }
+    $("control-share-modal").style.display = "flex";
+  }
+  function closeControlShareModal(){ $("control-share-modal").style.display = "none"; }
+  if (controlShareBtn) controlShareBtn.addEventListener("click", openControlShareModal);
+  $("control-share-close").addEventListener("click", closeControlShareModal);
+  $("control-share-modal").addEventListener("click", e=>{
+    if (e.target === $("control-share-modal")) closeControlShareModal();
+  });
+  $("control-share-copy").addEventListener("click", async ()=>{
+    const input = $("control-share-url");
+    try { await navigator.clipboard.writeText(input.value); }
+    catch(_){ input.select(); document.execCommand("copy"); }
+    const btn = $("control-share-copy");
+    const old = btn.textContent;
+    btn.textContent = "已复制";
+    setTimeout(()=>{ btn.textContent = old; }, 1300);
+  });
+
   function renderHints(){
     const root = $("hints-body");
     root.innerHTML = "";
@@ -1627,7 +1938,7 @@ __CODE__
   });
 
   // ============= SHARE MODAL =============
-  // 三个二维码 (party/show/input) + 三个复制按钮. 只在有 SESSION_ID 时才有意义.
+  // 三个二维码 (party/show/control) + 三个复制按钮. 只在有 SESSION_ID 时才有意义.
   let __shareQrRendered = false;
   function renderShareQR(canvasContainerId, url){
     if (!window.QrCreator) return;
@@ -1649,16 +1960,16 @@ __CODE__
     if (!SESSION_ID) return;
     const partyUrl = `${location.origin}/s/${SESSION_ID}`;
     const showUrl  = `${location.origin}/app/${SESSION_ID}?mode=show`;
-    const inputUrl = `${location.origin}/app/${SESSION_ID}?mode=input`;
+    const controlUrl = `${location.origin}/control/${SESSION_ID}`;
     $("share-url-party").value = partyUrl;
     $("share-url-show").value  = showUrl;
-    $("share-url-input").value = inputUrl;
+    $("share-url-control").value = controlUrl;
     if (!__shareQrRendered){
       // 等 qr-creator 加载后渲染 (如果 CDN 慢, 拖到第一次打开时才尝试)
       if (window.QrCreator){
         renderShareQR("share-qr-party", partyUrl);
         renderShareQR("share-qr-show",  showUrl);
-        renderShareQR("share-qr-input", inputUrl);
+        renderShareQR("share-qr-control", controlUrl);
         __shareQrRendered = true;
       } else {
         // CDN 还没到, 5 秒内 polling
@@ -1668,7 +1979,7 @@ __CODE__
             clearInterval(t);
             renderShareQR("share-qr-party", partyUrl);
             renderShareQR("share-qr-show",  showUrl);
-            renderShareQR("share-qr-input", inputUrl);
+            renderShareQR("share-qr-control", controlUrl);
             __shareQrRendered = true;
           } else if (++tries > 25) {
             clearInterval(t);
@@ -1707,7 +2018,9 @@ __CODE__
   // Esc 关闭任何打开的 modal
   document.addEventListener("keydown", e=>{
     if (e.key === "Escape"){
-      if ($("share-modal").style.display !== "none") closeShareModal();
+      if ($("control-session-modal").style.display !== "none") closeControlSessionModal();
+      else if ($("control-share-modal").style.display !== "none") closeControlShareModal();
+      else if ($("share-modal").style.display !== "none") closeShareModal();
       else if ($("hints-modal").style.display !== "none") closeHintsModal();
       else if ($("key-modal").style.display !== "none") closeKeyModal();
     }
@@ -2259,11 +2572,12 @@ stack(
     document.addEventListener("click", ()=>{ party.lastInteraction = Date.now(); }, true);
     // 启动轮询
     pollSession();
-  } else if (!llmCurrentKey()){
+  } else if (!llmCurrentKey() && !IS_CONTROL_MODE){
     log("sys","首次使用：请先在右上角 API KEY 中设置 LLM");
     openKeyModal();
   } else {
-    log("sys", `已检测到 ${llm.provider.toUpperCase()} API Key`);
+    log("sys", llmCurrentKey() ? `已检测到 ${llm.provider.toUpperCase()} API Key` : "控制端就绪 · 需要 session UUID 才能发送");
+    if (IS_CONTROL_MODE && !SESSION_ID) setControlStatus("没有检测到 UUID · 点卡片后输入 session UUID");
   }
 
   // unlock audio on first interaction

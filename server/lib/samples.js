@@ -16,14 +16,21 @@ export async function loadValidNames() {
     "oh", "rim", "cr", "rd", "sh", "tb", "perc", "misc", "fx",
   ]);
 
-  // tidal-drum-machines: 提供 bank 名
+  // tidal-drum-machines: 提供 bank 名 + bank↔drum 组合表 (用于检查 .bank("X") 下能不能用 s("Y"))
+  const bankDrums = new Map();  // bankName → Set of drum letters this bank actually has
   try {
     const tdm = JSON.parse(await fs.readFile(path.join(MANIFEST_DIR, "tidal-drum-machines.json"), "utf8"));
     for (const k of Object.keys(tdm)) {
       if (k.startsWith("_")) continue;
-      // 形如 RolandTR909_bd → 取下划线前
-      const i = k.indexOf("_");
-      if (i > 0) validBanks.add(k.slice(0, i));
+      // 形如 RolandTR909_bd → bank=RolandTR909, drum=bd
+      const i = k.lastIndexOf("_");
+      if (i > 0) {
+        const bank = k.slice(0, i);
+        const drum = k.slice(i + 1);
+        validBanks.add(bank);
+        if (!bankDrums.has(bank)) bankDrums.set(bank, new Set());
+        bankDrums.get(bank).add(drum);
+      }
     }
   } catch (e) {
     console.warn("[samples] tidal-drum-machines.json not found:", e.message);
@@ -55,6 +62,6 @@ export async function loadValidNames() {
     }
   } catch (e) {}
 
-  console.log(`[samples] loaded validBanks=${validBanks.size}, validSounds=${validSounds.size}`);
-  return { validBanks, validSounds };
+  console.log(`[samples] loaded validBanks=${validBanks.size}, validSounds=${validSounds.size}, bankDrums entries=${bankDrums.size}`);
+  return { validBanks, validSounds, bankDrums };
 }

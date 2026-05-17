@@ -145,13 +145,25 @@ DRUMS:
          sh  shaker               tb  tambourine
          perc misc fx             — generic buckets in some banks
 
-     • Coverage in the 72 drum-machine banks (use these to pick the right bank for the drum you want):
-         bd/sd/hh: in almost every bank (70/66/59 of 72) — always safe
-         oh: 58/72 — RolandTR909, RolandTR808 are safe choices
-         ht/mt/lt: 49/38/46 — use RolandTR* for these
-         cr/rd: only 43/33 of 72 — use RolandTR909 or AlesisSR16 etc.
-         sh/tb: 28/26 — use RolandTR707 or specific drum machines
+     • Coverage in the 71 drum-machine banks (use these to pick the right bank for the drum you want):
+         bd/sd/hh: in almost every bank (69/65/58) — always safe
+         oh: 57/71 — RolandTR909, RolandTR808 are safe choices
+         ht/mt/lt: 48/37/45 — use RolandTR* / AkaiLinn etc.
+         cr/rd: only 42/32 of 71 — use RolandTR909 or AlesisSR16
+         sh/tb: only 27/25 — see HARD CONSTRAINT below for which banks
          perc/misc/fx: very sparse — don't rely on these unless user explicitly asks
+
+     ⚠️ HARD CONSTRAINT — RolandTR909 / RolandTR808 / RolandTR707 / RolandTR606 / RolandTR505
+         ONLY have these drums: bd, sd, hh, oh, cp, cr, rd, rim, lt, mt, ht
+         They DO NOT have: sh (shaker), tb (tambourine), cb (cowbell), perc, fx, misc, ...
+         If you need sh / tb / cb / perc, you MUST use a DIFFERENT bank:
+           sh / tb: AkaiLinn, AlesisSR16, AlesisHR16, AkaiXR10, LinnDrum, LinnLM1, BossDR550, KorgM1
+           cb:      AkaiLinn, AlesisSR16, AkaiXR10, BossDR550, EmuSP12, RolandCompurhythm78
+           perc:    AlesisSR16, AlesisHR16, AkaiMPC60, BossDR550, EmuSP12
+         WRONG: s("sh*8").bank("RolandTR909")          // 909 没 sh, 报错 "sound RolandTR909_sh not found"
+         RIGHT: s("sh*8").bank("AkaiLinn").gain(0.3)   // AkaiLinn 有 sh
+         RIGHT: s("sh*8").bank("AlesisSR16").gain(0.3) // AlesisSR16 也有 sh
+         RIGHT: 多个不同 bank 一行用不同 voice: stack(s("bd*4").bank("RolandTR909"), s("sh*8").bank("AkaiLinn"))
 
      • In default dirt-samples (no bank): only bd, sd, hh, cp, cb, lt, mt, ht exist as bare names.
        For oh / rim / cr / rd / sh / tb you MUST chain a valid .bank() — e.g. .bank("RolandTR909").

@@ -39,10 +39,12 @@ TMP_HTML=$(mktemp)
 sed -e "s/__BUILD_TS__/${TS}/g" -e "s/__BUNDLE_VER__/${BUNDLE_VER}/g" index.html > "$TMP_HTML"
 echo "==> BUILD_TS=${TS}  BUNDLE_VER=${BUNDLE_VER}"
 
-# 2) rsync index.html (替换后) + landing.html + themes/
+# 2) rsync index.html (替换后) + landing.html + themes/ + assets/
 rsync -az "$TMP_HTML" "${REMOTE}:${REMOTE_DIR}/index.html"
 rsync -az landing.html "${REMOTE}:${REMOTE_DIR}/landing.html"
 rsync -az themes/ "${REMOTE}:${REMOTE_DIR}/themes/"
+# assets/ — control-icons SVG 等小图标 (~300KB, control 模式必需)
+[ -d assets ] && rsync -az --delete assets/ "${REMOTE}:${REMOTE_DIR}/assets/"
 rm -f "$TMP_HTML"
 
 # 3) 视参数同步 bundle / server

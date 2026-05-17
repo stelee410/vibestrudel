@@ -53,6 +53,7 @@ services:
       - ./landing.html:/srv/public/landing.html:ro
       - ./themes:/srv/public/themes:ro
       - ./vendor:/srv/public/vendor:ro
+      - ./assets:/srv/public/assets:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped

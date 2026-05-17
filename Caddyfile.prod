@@ -28,7 +28,11 @@
         rewrite * /index.html
         file_server
     }
-    @session_view path_regexp ^/(s|app)/[a-zA-Z0-9_-]+$
+    handle /control {
+        rewrite * /index.html
+        file_server
+    }
+    @session_view path_regexp ^/(s|app|control)/[a-zA-Z0-9_-]+$
     handle @session_view {
         rewrite * /index.html
         file_server

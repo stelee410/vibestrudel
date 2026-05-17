@@ -5,6 +5,7 @@
 #   /                       → landing.html (酷炫首页)
 #   /app                    → index.html (单机模式)
 #   /s/:id                  → index.html (live 客户端 SPA, 浏览器导航)
+#   /control/:id            → index.html (no-code 控制端)
 #
 #   POST /sessions          → app:8080 (创建 session)
 #   GET  /s/:id/code        → app:8080 (轮询当前代码)
@@ -44,8 +45,12 @@
         rewrite * /index.html
         file_server
     }
+    handle /control {
+        rewrite * /index.html
+        file_server
+    }
     # /s/:id 和 /app/:id 都返回 SPA — 客户端 JS 解析 URL 决定 solo/party 模式
-    @session_view path_regexp ^/(s|app)/[a-zA-Z0-9_-]+$
+    @session_view path_regexp ^/(s|app|control)/[a-zA-Z0-9_-]+$
     handle @session_view {
         rewrite * /index.html
         file_server

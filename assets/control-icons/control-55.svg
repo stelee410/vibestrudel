@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="温柔失眠">
+  <defs>
+    <linearGradient id="bg" x1="32" y1="20" x2="220" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b2028"/>
+      <stop offset="0.42" stop-color="rgb(52,82,113)"/>
+      <stop offset="1" stop-color="#06080c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="32%" cy="28%" r="78%">
+      <stop offset="0" stop-color="rgb(150,203,255)" stop-opacity=".95"/>
+      <stop offset=".42" stop-color="#75baff" stop-opacity=".46"/>
+      <stop offset="1" stop-color="#75baff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="beam" cx="28%" cy="72%" r="86%">
+      <stop offset="0" stop-color="rgb(167,183,189)" stop-opacity=".72"/>
+      <stop offset=".36" stop-color="#75baff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="1.15" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .19 0"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <rect width="256" height="256" rx="24" fill="url(#bg)"/>
+  <rect width="256" height="256" rx="24" fill="url(#glow)"/>
+  <path d="M30 214 C74 132 126 64 226 26 L240 70 C154 98 103 148 58 235 Z" fill="url(#beam)" opacity=".82"/>
+  <ellipse cx="132" cy="122" rx="102" ry="70" fill="none" stroke="#fff" stroke-opacity=".20" stroke-width="5" transform="rotate(-12 132 122)"/>
+  <ellipse cx="164" cy="168" rx="37" ry="45" fill="#030509" fill-opacity=".32" transform="rotate(28 164 168)"/>
+  <circle cx="70" cy="66" r="18" fill="#fff" opacity=".48" filter="url(#soft)"/>
+  <circle cx="70" cy="66" r="13" fill="#fff" opacity=".52"/>
+  <text x="128" y="166" text-anchor="middle" font-size="104" font-family="Arial, Helvetica, sans-serif" font-weight="800" fill="#f4f8fb" letter-spacing="-3">◔</text>
+  <rect x="1.5" y="1.5" width="253" height="253" rx="24" fill="none" stroke="#75baff" stroke-opacity=".70" stroke-width="3"/>
+  <rect x="12" y="12" width="232" height="232" rx="18" fill="none" stroke="#fff" stroke-opacity=".08"/>
+  <rect width="256" height="256" rx="24" filter="url(#grain)" opacity=".55"/>
+</svg>

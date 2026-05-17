@@ -551,7 +551,7 @@
             <div class="qr-logo" data-color="blue"></div>
           </div>
           <div class="qr-label" data-i18n="landing.qr.input">INPUT · Controller</div>
-          <div class="qr-sub" id="qr-input-url">/app/—?mode=input</div>
+          <div class="qr-sub" id="qr-input-url">/control/—</div>
         </div>
       </div>
       <div class="qr-tip" data-i18n="landing.qr.tip">📱 Scan any QR code with your phone to join</div>
@@ -689,12 +689,12 @@
       const { id } = await res.json();
       const partyUrl = `${location.origin}/app/${id}`;
       const showUrl  = `${location.origin}/app/${id}?mode=show`;
-      const inputUrl = `${location.origin}/app/${id}?mode=input`;
+      const inputUrl = `${location.origin}/control/${id}`;
       urlInput.value = partyUrl;
       enterLnk.href = `/app/${id}`;
       document.getElementById("qr-party-url").textContent = `/app/${id}`;
       document.getElementById("qr-show-url").textContent  = `/app/${id}?mode=show`;
-      document.getElementById("qr-input-url").textContent = `/app/${id}?mode=input`;
+      document.getElementById("qr-input-url").textContent = `/control/${id}`;
       // 生成三个 QR
       renderQR("qr-party", partyUrl, "#0a0d0b", "#7cffb6");
       renderQR("qr-show",  showUrl,  "#1a130a", "#ffb347");

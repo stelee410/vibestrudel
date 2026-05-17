@@ -182,10 +182,74 @@ export function validate(code, ctx = {}) {
             errors.push(`.scale("${v}") format invalid (use "C:minor")`);
           }
         }
+
+        // 检查 s("X").bank("Y") 组合 — 如果 bank Y 不含鼓 X 就报错
+        // 避开 "RolandTR909_sh not found" 这类运行时错
+        if (methodName === "bank" && node.arguments[0]?.type === "Literal"
+            && typeof node.arguments[0].value === "string"
+            && ctx.bankDrums) {
+          const bankName = node.arguments[0].value;
+          const allowedDrums = ctx.bankDrums.get(bankName);
+          if (allowedDrums) {
+            // 沿着 .bank() 的对象链往里走找 s("...") 调用
+            const drumPattern = findSPattern(callee.object);
+            if (drumPattern) {
+              const tokens = extractDrumTokens(drumPattern);
+              for (const tok of tokens) {
+                if (!allowedDrums.has(tok)) {
+                  errors.push(`bank "${bankName}" 不含 "${tok}" — 该 bank 只有: ${[...allowedDrums].sort().join(", ")}`);
+                }
+              }
+            }
+          }
+        }
       }
     },
   });
 
   if (errors.length) return { ok: false, errors };
   return { ok: true };
+}
+
+// 沿着 method chain 的 object 往里走, 找形如 s("...") 的 CallExpression, 返回里面的 string literal
+function findSPattern(node) {
+  while (node) {
+    if (node.type === "CallExpression") {
+      const cle = node.callee;
+      // s("...") / sound("...") — 顶级 Identifier
+      if (cle.type === "Identifier" && (cle.name === "s" || cle.name === "sound")
+          && node.arguments[0]?.type === "Literal"
+          && typeof node.arguments[0].value === "string") {
+        return node.arguments[0].value;
+      }
+      // 链上某个 .s("...") — MemberExpression
+      if (cle.type === "MemberExpression" && cle.property?.type === "Identifier"
+          && (cle.property.name === "s" || cle.property.name === "sound")
+          && node.arguments[0]?.type === "Literal"
+          && typeof node.arguments[0].value === "string") {
+        return node.arguments[0].value;
+      }
+      // 继续往里 (e.g., .gain(...).bank("X") — gain 调用包着 s)
+      node = cle.type === "MemberExpression" ? cle.object : null;
+    } else {
+      break;
+    }
+  }
+  return null;
+}
+
+// mini DSL pattern 字符串里提取所有 drum letter token
+// "bd*4" → ["bd"];  "~ ~ ~ oh" → ["oh"];  "[bd sd]*2" → ["bd","sd"];  "sh(3,8)" → ["sh"]
+function extractDrumTokens(pattern) {
+  if (!pattern) return [];
+  // split 所有非字母字符 (数字、空格、特殊符号), 留下纯字母 token
+  const raw = pattern.split(/[^a-zA-Z]+/).filter(Boolean);
+  const out = new Set();
+  for (const tok of raw) {
+    // 排除 mini DSL 关键字 / 静音占位
+    if (tok === "x" || tok === "X") continue;  // 占位符
+    // 鼓字母通常 1-5 字符, 全小写
+    if (tok.length <= 8 && /^[a-z]+$/.test(tok)) out.add(tok);
+  }
+  return [...out];
 }

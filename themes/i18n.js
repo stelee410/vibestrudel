@@ -29,12 +29,14 @@
       "party.share_tip": "Click to share session",
       "mode.show":        "📺 SHOW",
       "mode.input":       "🎛 INPUT",
+      "mode.control":     "✦ CONTROL",
 
       // === Share modal ===
       "share.title":      "SHARE SESSION",
       "share.party":      "PARTY · full client",
       "share.show":       "SHOW · stage display",
       "share.input":      "INPUT · audience input",
+      "share.control":    "CONTROL · visual controller",
       "share.copy":       "COPY",
       "share.copied":     "✓ COPIED",
 
@@ -167,11 +169,13 @@
       "party.share_tip": "点击分享 session",
       "mode.show":        "📺 显示",
       "mode.input":       "🎛 输入",
+      "mode.control":     "✦ 控制",
 
       "share.title":      "分享 SESSION",
       "share.party":      "完整端 · 演奏控制",
       "share.show":       "演出端 · 仅看代码",
       "share.input":      "观众端 · 文字输入",
+      "share.control":    "控制端 · 情绪卡片",
       "share.copy":       "复制",
       "share.copied":     "✓ 已复制",
 
@@ -302,6 +306,7 @@
       "share.party":      "PARTY · フル操作",
       "share.show":       "SHOW · 表示専用",
       "share.input":      "INPUT · 観客入力",
+      "share.control":    "CONTROL · 観客コントローラー",
       "share.copy":       "コピー",
       "share.copied":     "✓ コピー済",
 
@@ -432,6 +437,7 @@
       "share.party":      "PARTY · contrôle complet",
       "share.show":       "SHOW · affichage scène",
       "share.input":      "INPUT · entrée du public",
+      "share.control":    "CONTROL · contrôleur public",
       "share.copy":       "COPIER",
       "share.copied":     "✓ COPIÉ",
 
