@@ -42,6 +42,7 @@ export async function callGemini({ apiKey, systemPrompt, userText, history = [],
         properties: {
           code:        { type: "string" },
           explanation: { type: "string" },
+          visual:      { type: "string" },  // optional Hydra code, "" 表示不要视觉
         },
         required: ["code", "explanation"],
       },
@@ -72,6 +73,7 @@ export async function callGemini({ apiKey, systemPrompt, userText, history = [],
   return {
     code: parsed.code || "",
     explanation: parsed.explanation || "",
+    visual: parsed.visual || "",       // optional Hydra code
     tokensIn:  usage.promptTokenCount || 0,
     tokensOut: usage.candidatesTokenCount || 0,
   };

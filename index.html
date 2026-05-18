@@ -45,6 +45,8 @@
 </script>
 <script>document.write('<script src="' + window.__ASSET_BASE + '/themes/i18n.js?v=' + window.__APP_VER + '"><\/script>');</script>
 <script src="https://cdn.jsdelivr.net/npm/qr-creator@1.0.0/dist/qr-creator.min.js"></script>
+<!-- Hydra WebGL 视觉合成器 — AI 可生成 visual 字段, eval 后跑在 #hydra-canvas -->
+<script src="https://unpkg.com/hydra-synth@1.3.29/dist/hydra-synth.js"></script>
 </head>
 <body>
 
@@ -358,7 +360,34 @@
   </div>
 </div>
 
-<!-- ============== STRUDEL VISUAL OVERLAY (全屏, 不挡 UI) ============== -->
+<!-- ============== SHOW MODE STAGE — 大喇叭 + 大电平 (只在 mode-show 显示) ============== -->
+<div id="show-stage" aria-hidden="true">
+  <div class="show-art">
+    <img class="show-art-custom" id="show-art-custom" alt="" style="display:none">
+    <svg class="show-art-default" id="show-art-default" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <!-- 大喇叭: 主体 cone + 圆环 + 振膜 -->
+      <circle cx="120" cy="120" r="100" stroke-width="3" opacity=".25"/>
+      <circle cx="120" cy="120" r="78" stroke-width="3" opacity=".4"/>
+      <circle cx="120" cy="120" r="56" stroke-width="4"/>
+      <circle cx="120" cy="120" r="28" fill="currentColor" stroke="none"/>
+      <circle cx="120" cy="120" r="10" fill="#0a0b0e" stroke="none"/>
+      <!-- 振膜小孔环 -->
+      <circle cx="120" cy="60" r="3" fill="currentColor" stroke="none"/>
+      <circle cx="120" cy="180" r="3" fill="currentColor" stroke="none"/>
+      <circle cx="60" cy="120" r="3" fill="currentColor" stroke="none"/>
+      <circle cx="180" cy="120" r="3" fill="currentColor" stroke="none"/>
+    </svg>
+  </div>
+  <div class="show-level">
+    <div class="show-level-bars" id="show-level-bars"></div>
+    <div class="show-level-label" id="show-level-label">● LIVE · waiting</div>
+  </div>
+</div>
+
+<!-- ============== HYDRA 全屏背景视觉 (z-index 0, panel 之下) ============== -->
+<canvas id="hydra-canvas" aria-hidden="true"></canvas>
+
+<!-- ============== STRUDEL VISUAL OVERLAY (全屏, z-index 60 在 panel 之上) ============== -->
 <canvas id="test-canvas" aria-hidden="true"></canvas>
 
 <!-- ============== STRUDEL ============== -->
@@ -370,7 +399,8 @@
     { name: "tidal-drum-machines", local: ASSET_BASE + "/vendor/samples/tidal-drum-machines.json",  remote: "https://strudel.b-cdn.net/tidal-drum-machines.json" },
     { name: "piano",               local: ASSET_BASE + "/vendor/samples/piano.json",                remote: "https://strudel.b-cdn.net/piano.json" },
     // VCSL 2.4GB 太大不打包, 始终走官方 CDN (服务端仍读本地 manifest 做 bank/sound 校验)
-    { name: "vcsl",                local: null,                                        remote: "https://strudel.b-cdn.net/vcsl.json" },
+    // VCSL: 走本地 manifest (175KB, 已修过 _base 指向 b-cdn), wav 走 b-cdn 而不是 github raw
+    { name: "vcsl",                local: "/vendor/samples/vcsl.json",                 remote: "https://strudel.b-cdn.net/vcsl.json" },
   ];
   // 本地 bundle 已经把 @strudel/draw 一起打包,视觉链式方法 (.pianoroll/.scope 等) 全部可用
   // bundle 用 sha256 短指纹做版本 — 内容没变就不变, 浏览器走 24h 缓存不重下 1.2MB.
@@ -440,14 +470,20 @@
       const lookbehind = 1, lookahead = 1;
       function frame(){
         try {
-          const pattern = repl?.scheduler?.pattern;
-          if (pattern && typeof pattern.getPainters === "function"){
-            const time = repl.scheduler.now ? repl.scheduler.now() : 0;
-            const haps = pattern.queryArc(time - lookbehind, time + lookahead);
-            const drawTime = [-lookbehind, lookahead];
-            const painters = pattern.getPainters();
-            for (const painter of painters){
-              try { painter(__vizCtx, time, haps, drawTime); } catch(_){}
+          // Hydra 在跑时跳过 Strudel painters — 否则 .pianoroll() 等会全屏盖住 hydra canvas
+          if (document.body.classList.contains("hydra-on")){
+            // 顺手清掉残留的 strudel canvas 内容 (避免静帧残留)
+            try { __vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height); } catch(_){}
+          } else {
+            const pattern = repl?.scheduler?.pattern;
+            if (pattern && typeof pattern.getPainters === "function"){
+              const time = repl.scheduler.now ? repl.scheduler.now() : 0;
+              const haps = pattern.queryArc(time - lookbehind, time + lookahead);
+              const drawTime = [-lookbehind, lookahead];
+              const painters = pattern.getPainters();
+              for (const painter of painters){
+                try { painter(__vizCtx, time, haps, drawTime); } catch(_){}
+              }
             }
           }
         } catch(_){}
@@ -485,6 +521,12 @@
     window.__strudelReady.then((repl) => {
       window.__strudelRepl = repl;
       startPainterLoop(repl);
+      // Hydra setup 在另一个 (非 module) script 里定义, 通过 window 调用 (module scope 不直接看 normal script global)
+      if (typeof window.setupHydraOnce === "function") {
+        window.setupHydraOnce();
+      } else {
+        console.warn("[hydra] setupHydraOnce 还没就绪, 跳过");
+      }
     }).catch((e) => console.error("[painter-loop] init failed:", e));
     window.dispatchEvent(new CustomEvent("strudel:loaded"));
   } catch (err) {
@@ -784,6 +826,11 @@
     if (db) db.style.display = "none";
     // 一有代码就解锁 PLAY (之前要等 evaluatePattern 第一次成功才放开 — 刷新后用户没法直接按播放)
     if (formatted && formatted.trim() && playBtn) playBtn.disabled = false;
+    // 代码里的 setcpm 同步到 tempo widget (silent: 不反过来改代码, 避免递归)
+    const bpmInCode = bpmFromCode(formatted);
+    if (bpmInCode && bpmInCode !== state.bpm) {
+      setBpm(bpmInCode, { silent: true });
+    }
   }
 
   // ---------- LED helpers ----------
@@ -852,11 +899,155 @@
       };
 
       __masterLimiterInstalled = true;
+      // 暴露 limiter 给 hydra setup 用 (它要从 limiter 接 analyser)
+      window.__masterLimiter = limiter;
+      // 如果 Hydra 早就 init 但 audio bridge 因 limiter 没 ready 失败, 现在补上
+      if (typeof window.__setupHydraAudio === "function") {
+        window.__setupHydraAudio();
+      }
       console.log("[master-limiter] installed @ -3dBFS, 20:1 (via connect hook)");
     } catch(e){
       console.warn("[master-limiter] install failed:", e);
     }
   }
+
+  // =================== HYDRA — WebGL 视觉合成器 ===================
+  // AI 在 LLM 响应里 optional 返回 visual:"<hydra code>", 客户端 eval 跑.
+  // Audio bridge: 从 master limiter 接 analyser, 频谱数据写到 window.__audio* 全局,
+  // Hydra 代码用 `() => window.__audioLow` 这种 lambda 拿到实时音频反馈.
+  let __hydraInstance = null;
+  let __hydraLastCode = null;
+  window.setupHydraOnce = setupHydraOnce;  // 暴露给 module script 调
+  function setupHydraOnce(){
+    if (__hydraInstance) return;
+    if (typeof window.Hydra !== "function") {
+      console.warn("[hydra] CDN 未加载, visual 字段会被忽略");
+      return;
+    }
+    try {
+      const canvas = document.getElementById("hydra-canvas");
+      if (!canvas) return;
+      // 设置 hydra canvas 分辨率匹配显示
+      function resizeHydra(){
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = Math.floor(window.innerWidth  * dpr);
+        canvas.height = Math.floor(window.innerHeight * dpr);
+      }
+      resizeHydra();
+      window.addEventListener("resize", resizeHydra);
+
+      // 保存 Strudel 关键全局, 防被 Hydra makeGlobal 覆盖
+      const savedGlobals = {};
+      const SAVE_KEYS = ["hush","src","time","bpm","width","height","mouse","render"];
+      for (const k of SAVE_KEYS) {
+        if (typeof window[k] !== "undefined") savedGlobals[k] = window[k];
+      }
+
+      __hydraInstance = new window.Hydra({
+        canvas,
+        detectAudio: false,        // 我们自己接 Strudel 音频, 不用 hydra 默认的 mic
+        enableStreamCapture: false,
+        makeGlobal: true,           // osc/noise/gradient 等全局, eval 用户代码方便
+      });
+
+      // 把 Hydra 占用的关键名字保存到 __hydra 命名空间, 然后还原 Strudel 的
+      window.__hydra = {};
+      for (const k of SAVE_KEYS) {
+        window.__hydra[k] = window[k];          // 留存 Hydra 版本
+        if (k in savedGlobals) window[k] = savedGlobals[k];  // 还原 Strudel 版本
+      }
+
+      // ===== Audio bridge: 从 limiter 引一根线到 analyser =====
+      // 如果 limiter 还没 ready (常见), 先 stub 全局 audio, 后面 limiter install 时回头调.
+      window.__setupHydraAudio = setupAudioReactivity;
+      setupAudioReactivity();
+
+      console.log("[hydra] initialized (canvas + audio bridge)");
+    } catch(e){
+      console.error("[hydra] init failed:", e);
+      __hydraInstance = null;
+    }
+  }
+
+  let __hydraAudioBridgeInstalled = false;
+  function setupAudioReactivity(){
+    if (__hydraAudioBridgeInstalled) return;
+    try {
+      const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
+      const limiter = window.__masterLimiter;
+      if (!ctx || !limiter) {
+        console.warn("[hydra] no audio context / limiter yet, audio reactivity will retry when limiter installs");
+        return;  // 等 limiter install 后回头调 (master-limiter setup 那里 hook 了)
+      }
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;     // 128 bins, ~22kHz / 128 = 172Hz per bin
+      analyser.smoothingTimeConstant = 0.7;
+      // limiter 已经接到 realDest, 这里 fork 一根到 analyser (analyser 是 sink, 不再 connect 出去)
+      limiter.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      window.__audioLow = 0;
+      window.__audioMid = 0;
+      window.__audioHi  = 0;
+      window.__audioFFT = data;   // 给高级用户用
+      function tick(){
+        analyser.getByteFrequencyData(data);
+        let low=0, mid=0, hi=0;
+        // bins 0-10 ≈ <1.7kHz, 10-40 ≈ 1.7-6.9kHz, 40-128 ≈ 6.9-22kHz
+        for (let i=0; i<10; i++) low += data[i];
+        for (let i=10; i<40; i++) mid += data[i];
+        for (let i=40; i<128; i++) hi += data[i];
+        window.__audioLow = low / (10*255);
+        window.__audioMid = mid / (30*255);
+        window.__audioHi  = hi  / (88*255);
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+      __hydraAudioBridgeInstalled = true;
+      console.log("[hydra] audio bridge ready (limiter → analyser → window.__audio*)");
+    } catch(e){
+      console.warn("[hydra] audio bridge failed:", e);
+    }
+  }
+
+  function runHydra(code){
+    if (!__hydraInstance) {
+      console.warn("[hydra] not initialized, skipping visual");
+      return;
+    }
+    if (!code || typeof code !== "string" || !code.trim()) {
+      stopHydra();
+      return;
+    }
+    // 同样代码不重跑 (避免每个 cycle 刷新视觉打断动画)
+    if (code === __hydraLastCode) return;
+    __hydraLastCode = code;
+    try {
+      // hydra eval — 信任 AI 输出 + 服务端 validate
+      // 用 Function 而不是 eval 一来更接近 strict mode, 二来好排查 stack trace
+      (new Function(code))();
+      document.body.classList.add("hydra-on");
+      console.log("[hydra] applied visual:", code.slice(0, 80) + (code.length > 80 ? "..." : ""));
+    } catch(e){
+      console.error("[hydra] eval failed:", e.message, "\ncode:", code);
+    }
+  }
+  function stopHydra(){
+    if (!__hydraInstance) return;
+    try {
+      // 用保存好的 hydra hush() (而不是被还原的 Strudel hush)
+      if (window.__hydra && typeof window.__hydra.hush === "function") {
+        window.__hydra.hush();
+      } else {
+        // 兜底: 用 solid 全黑覆盖
+        try { (new Function("solid(0,0,0,1).out()"))(); } catch(_){}
+      }
+      document.body.classList.remove("hydra-on");
+      __hydraLastCode = null;
+    } catch(_){}
+  }
+  // 暴露给后面的 evaluatePattern / pollSession 调用
+  window.__vibeRunHydra = runHydra;
+  window.__vibeStopHydra = stopHydra;
 
   async function evaluatePattern(code){
     await ensureStrudel();
@@ -947,14 +1138,96 @@
     }, 220);
   }
 
+  // ============ SHOW MODE — 大喇叭舞台 + 大电平 ============
+  // 自定义图片: 优先级 ?bg=URL  > localStorage("vibestrudel.showBg") > 默认 SVG
+  (function setupShowStage(){
+    const customImg = document.getElementById("show-art-custom");
+    const defaultSvg = document.getElementById("show-art-default");
+    if (!customImg || !defaultSvg) return;
+    const qsBg = new URLSearchParams(location.search).get("bg");
+    const storedBg = localStorage.getItem("vibestrudel.showBg");
+    const url = qsBg || storedBg;
+    if (url) {
+      customImg.onload = () => { customImg.style.display = "block"; defaultSvg.style.display = "none"; };
+      customImg.onerror = () => { customImg.style.display = "none"; defaultSvg.style.display = "block"; };
+      customImg.src = url;
+      if (qsBg) localStorage.setItem("vibestrudel.showBg", qsBg);
+    }
+  })();
+
+  // 大电平 16 bar — 跟随 state.playing 抖动, 真随机但偏向中央高 (有节奏感)
+  const showLevelBars = document.getElementById("show-level-bars");
+  const showLevelLabel = document.getElementById("show-level-label");
+  let showBars = [];
+  if (showLevelBars) {
+    for (let i = 0; i < 24; i++) {
+      const b = document.createElement("span");
+      showLevelBars.appendChild(b);
+      showBars.push(b);
+    }
+  }
+  function tickShowLevel(){
+    if (!showBars.length) return;
+    const playing = state.playing;
+    document.body.classList.toggle("is-playing", !!playing);
+    if (showLevelLabel){
+      showLevelLabel.textContent = playing
+        ? `● LIVE · CYCLE ${state.cycle}`
+        : "● LIVE · waiting";
+    }
+    for (let i = 0; i < showBars.length; i++){
+      let h;
+      if (!playing){
+        h = 4 + Math.random() * 6;     // idle: 低低浮动
+      } else {
+        // 中央 bar 高,两端低, 加随机抖
+        const center = (showBars.length - 1) / 2;
+        const dist = Math.abs(i - center) / center;
+        const base = (1 - dist * 0.6) * 70;
+        h = base + Math.random() * 30;
+      }
+      showBars[i].style.height = h.toFixed(0) + "%";
+    }
+  }
+  setInterval(tickShowLevel, 90);
+
   // ---------- BPM ----------
-  function setBpm(v){
+  // 从代码里解析 BPM — 支持 setcpm(120/4), setcpm(120), 没有就 null
+  function bpmFromCode(code){
+    if (!code) return null;
+    const m = code.match(/setcpm\s*\(\s*(\d+(?:\.\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?))?\s*\)/);
+    if (!m) return null;
+    const n = parseFloat(m[1]), d = m[2] ? parseFloat(m[2]) : 1;
+    return Math.round((n / d) * 4);
+  }
+  // 把代码里 setcpm(...) 改成新 BPM, 找不到就在最前面 prepend
+  function rewriteCodeBpm(code, bpm){
+    if (!code) return `setcpm(${bpm}/4)`;
+    if (/setcpm\s*\(/.test(code)){
+      return code.replace(/setcpm\s*\([^)]*\)/, `setcpm(${bpm}/4)`);
+    }
+    // prepend setcpm + 分号 + 换行
+    return `setcpm(${bpm}/4);\n${code}`;
+  }
+
+  function setBpm(v, opts = {}){
     v = Math.max(40, Math.min(240, +v|0));
+    if (v === state.bpm && !opts.force) return;
     state.bpm = v;
     bpmInput.value = v;
     bpmReadout.textContent = v;
+    // Strudel 实时变速 (不需要重新 evaluate)
     if (typeof window.setcpm === "function"){
       try { window.setcpm(v / 4); } catch(_){}
+    }
+    // 把当前代码里的 setcpm() 同步成新值 (RUN/分享/AI 读取都能拿到一致的 BPM)
+    if (!opts.silent && state.code){
+      const newCode = rewriteCodeBpm(state.code, v);
+      if (newCode !== state.code){
+        state.code = newCode;
+        // 重 highlight 但不走完整 setCode (避免递归)
+        try { codeDisplay.innerHTML = highlight(newCode); } catch(_){}
+      }
     }
   }
 
@@ -1458,6 +1731,10 @@ __CODE__
             if (!IS_CONTROLLER_MODE){
               setCode(data.code);
               try { await evaluatePattern(data.code); } catch(_){}
+              // Hydra 视觉同步: data.visual 有值就跑, 空字符串保留当前 (不主动 stop)
+              if (typeof data.visual === "string" && data.visual.trim() && window.__vibeRunHydra) {
+                window.__vibeRunHydra(data.visual);
+              }
             }
           }
         }
@@ -2065,6 +2342,11 @@ __CODE__
   codeDisplay.addEventListener("input", ()=>{
     state.code = codeDisplay.textContent;
     markDirty(true);
+    // 用户手敲改了 setcpm — 同步 tempo widget (silent: 别回头改代码, 用户正在打字)
+    const bpmInCode = bpmFromCode(state.code);
+    if (bpmInCode && bpmInCode !== state.bpm) {
+      setBpm(bpmInCode, { silent: true });
+    }
     if (autoEval){
       clearTimeout(autoTimer);
       autoTimer = setTimeout(()=>{

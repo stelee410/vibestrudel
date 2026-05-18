@@ -33,6 +33,8 @@ const SAFE_METHODS = new Set([
   "delay", "delaytime", "delayfb", "delayfeedback",
   "room", "roomsize", "size", "dry",
   "chorus", "tremolo",
+  "duck", "orbit",  // sidechain ducking — kick 放 .orbit(N), 其他 voice 用 .duck(N) 引用
+  "mask", "ply", "fix", "tag",  // 编排用
   // 调式
   "scale", "rot", "transpose", "add", "sub", "mul", "div", "range",
   // 视觉
@@ -101,11 +103,12 @@ export function validate(code, ctx = {}) {
         }
 
         // 检查 .gain(N) / .velocity(N) / .postgain(N) 数字常量 (含 -N 等 UnaryExpression)
-        // 上限 1.0 — 0~1.0 是音乐范围, 超过容易爆破耳膜
+        // 上限 1.5 — VCSL 等真采样天然 -20dB, 需要更高 headroom.
+        // 客户端 master limiter (DynamicsCompressor -3dBFS, 20:1) 兜底防炸耳膜.
         if (methodName === "gain" || methodName === "velocity" || methodName === "postgain") {
           const v = literalNumber(node.arguments[0]);
-          if (v !== null && (v < 0 || v > 1.0)) {
-            errors.push(`.${methodName}(${v}) out of safe range [0, 1.0]`);
+          if (v !== null && (v < 0 || v > 1.5)) {
+            errors.push(`.${methodName}(${v}) out of safe range [0, 1.5]`);
           }
         }
 
@@ -252,4 +255,99 @@ function extractDrumTokens(pattern) {
     if (tok.length <= 8 && /^[a-z]+$/.test(tok)) out.add(tok);
   }
   return [...out];
+}
+
+// ========================= HYDRA validate =========================
+// Hydra 是个 webgl 视觉合成器, AI 在 visual 字段写 chained 调用 (osc(...).rotate(...).out())
+// 白名单防止 eval 任意 JS — fetch/import/document/window 等通通拒
+const HYDRA_TOPLEVEL = new Set([
+  // sources
+  "osc","noise","voronoi","shape","gradient","src","solid",
+  // outputs / sources index
+  "s0","s1","s2","s3","o0","o1","o2","o3",
+  // global controls
+  "render","hush","setResolution","setFunction","setBins","setSmooth",
+  // audio reactivity
+  "a","time","bpm","mouse","width","height","fft",
+  // misc
+  "Math",
+]);
+const HYDRA_METHODS = new Set([
+  // geometry
+  "rotate","scale","scrollX","scrollY","pixelate","repeat","repeatX","repeatY","kaleid",
+  // color
+  "color","colorama","saturate","contrast","brightness","luma","invert","posterize","shift","r","g","b","a",
+  // composite
+  "add","sub","mul","layer","mask","blend","diff",
+  // modulate
+  "modulate","modulateRepeat","modulateRotate","modulatePixelate","modulateScale","modulateScrollX","modulateScrollY","modulateKaleid","modulateHue",
+  // output
+  "out","init","initImage","initVideo","initCam","initScreen","initStream",
+  // audio
+  "fft","setSmooth","setBins","setCutoff","setScale","show",
+  // misc
+  "thresh","fast","blend","speed",
+]);
+
+export function validateHydra(code) {
+  if (!code || typeof code !== "string") return { ok: true };
+  const trimmed = code.trim();
+  if (!trimmed) return { ok: true };
+  if (trimmed.length > 2000) return { ok: false, errors: ["hydra code too long"] };
+
+  let ast;
+  try {
+    ast = Parser.parse(trimmed, { ecmaVersion: 2022, sourceType: "module", allowReturnOutsideFunction: true });
+  } catch (e) {
+    return { ok: false, errors: [`hydra JS syntax: ${e.message}`] };
+  }
+
+  const errors = [];
+  walkSimple(ast, {
+    CallExpression(node) {
+      const callee = node.callee;
+      if (callee.type === "Identifier") {
+        if (!HYDRA_TOPLEVEL.has(callee.name)) {
+          errors.push(`hydra: unknown top-level "${callee.name}()"`);
+        }
+      }
+      if (callee.type === "MemberExpression" && callee.property?.type === "Identifier") {
+        const m = callee.property.name;
+        if (!HYDRA_METHODS.has(m) && !HYDRA_TOPLEVEL.has(m)) {
+          errors.push(`hydra: unknown method ".${m}()"`);
+        }
+      }
+    },
+    // 禁止访问 document / globalThis / fetch / 等危险全局
+    // window 特别处理: 只允许 window.__audioLow / __audioMid / __audioHi / __audioFFT
+    MemberExpression(node) {
+      if (node.object?.type === "Identifier") {
+        const name = node.object.name;
+        if (name === "window") {
+          const prop = node.property?.name;
+          const ALLOWED_WINDOW = new Set(["__audioLow","__audioMid","__audioHi","__audioFFT"]);
+          if (!node.computed && ALLOWED_WINDOW.has(prop)) return;  // 放行
+          errors.push(`hydra: only window.__audioLow/Mid/Hi/FFT allowed, got window.${prop || "?"}`);
+          return;
+        }
+        const dangerous = new Set([
+          "document","globalThis","self","top","parent","frames",
+          "localStorage","sessionStorage","indexedDB","XMLHttpRequest",
+          "fetch","WebSocket","navigator","location","history",
+          "eval","Function","Worker","SharedWorker",
+        ]);
+        if (dangerous.has(name)) {
+          errors.push(`hydra: forbidden global "${name}"`);
+        }
+      }
+    },
+    // 禁止 import / 异步 / try-catch 中藏猫腻
+    ImportExpression() { errors.push("hydra: import() forbidden"); },
+    NewExpression(node) {
+      if (node.callee?.name === "Function") errors.push("hydra: new Function forbidden");
+    },
+  });
+
+  if (errors.length) return { ok: false, errors };
+  return { ok: true };
 }

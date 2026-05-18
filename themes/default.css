@@ -131,6 +131,8 @@ body::after{
   padding-left:max(10px, env(safe-area-inset-left));
   padding-right:max(10px, env(safe-area-inset-right));
   padding-bottom:max(10px, env(safe-area-inset-bottom));
+  /* 关键: 否则 #hydra-canvas (fixed, z-index:0) 会盖在 #app (static) 之上挡掉 UI */
+  position:relative; z-index:1;
 }
 
 /* ===== Top Bar ===== */
@@ -234,8 +236,22 @@ header.topbar{
 .mode-badge{
   display:none;  /* 默认不显示, 进入对应模式才显示 */
   font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
-  padding:6px 11px;border-radius:var(--r-ctrl);text-transform:uppercase;
+  padding:6px 11px 6px 9px;border-radius:var(--r-ctrl);text-transform:uppercase;
   font-weight:700;
+  gap:7px;align-items:center;
+}
+/* 左侧脉冲圆点 — 跟左侧 LED 一致语言, 颜色随模式 */
+.mode-badge::before{
+  content:"";
+  width:7px;height:7px;border-radius:50%;
+  background:currentColor;
+  box-shadow:0 0 6px currentColor, 0 0 12px currentColor;
+  animation:mode-pulse 1.6s ease-in-out infinite;
+  flex-shrink:0;
+}
+@keyframes mode-pulse{
+  0%, 100% { opacity:1; transform:scale(1) }
+  50%      { opacity:.5; transform:scale(.85) }
 }
 .mode-show-only{
   color:var(--led-warn);border:1px solid #5a4318;
@@ -253,23 +269,75 @@ body.mode-show .mode-show-only,
 body.mode-input .mode-input-only,
 body.mode-control .mode-control-only{display:inline-flex;align-items:center}
 
-/* SHOW 模式: 只显示代码区 + transport + 顶栏 */
+/* SHOW 模式: 隐藏 code/console/transport, 只显示中央 stage (大喇叭 + 大电平), canvas 视觉照常 */
 body.mode-show #console-panel,
+body.mode-show #code-panel,
 body.mode-show .preset-rack,
 body.mode-show #api-key-btn,
+body.mode-show footer.transport,
+body.mode-show main,
 body.mode-show .leds .led[data-color="blue"],   /* AI LED 无意义 */
-body.mode-show .leds .led[data-color="amber"]   /* AUDIO LED OK 留 */
+body.mode-show .leds .led[data-color="amber"]   /* AUDIO LED 在 stage label 表示 */
 { display:none !important }
 
-body.mode-show main{
-  grid-template-columns:1fr;
-  grid-template-rows:1fr;
+body.mode-show #app{
+  grid-template-rows: 64px 1fr;   /* topbar + stage */
+  grid-template-columns: 1fr;
 }
-body.mode-show #code-panel{
-  grid-column:1 / -1;
+
+/* === Stage 容器 === */
+#show-stage{display:none}
+body.mode-show #show-stage{
+  display:flex;
+  position:fixed; top:64px; left:0; right:0; bottom:0;
+  flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:6vmin;
+  padding:4vmin;
+  pointer-events:none;        /* 不挡 modal/topbar 交互 */
+  z-index:2;
 }
-body.mode-show #code-panel .panel-head .right .head-btn,
-body.mode-show #code-panel .panel-head .right .badge.dirty{display:none}
+.show-art{
+  width:min(50vmin, 480px); aspect-ratio:1/1;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--accent);
+  filter:drop-shadow(0 0 30px var(--accent)) drop-shadow(0 0 60px #ff6b3550);
+  animation:show-pulse 2.2s ease-in-out infinite;
+}
+body.mode-show.is-playing .show-art{ animation-duration:0.6s }
+.show-art svg, .show-art img{
+  width:100%; height:100%; object-fit:contain; display:block;
+}
+@keyframes show-pulse{
+  0%, 100% { transform:scale(1); opacity:.92 }
+  50%      { transform:scale(1.04); opacity:1 }
+}
+
+/* === 大型电平表 === */
+.show-level{
+  width:min(60vmin, 600px);
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+}
+.show-level-bars{
+  display:flex; gap:4px; height:9vmin; max-height:96px; width:100%;
+  align-items:flex-end; justify-content:space-between;
+}
+.show-level-bars span{
+  flex:1; min-width:0; height:8%;
+  background:linear-gradient(180deg, var(--led-err) 0%, var(--led-warn) 35%, var(--led-on) 80%);
+  border-radius:3px;
+  transition: height 0.12s ease-out;
+  box-shadow:0 0 6px currentColor;
+}
+.show-level-label{
+  font-family:var(--font-mono); font-size:clamp(11px, 1.6vmin, 14px);
+  letter-spacing:.3em; color:var(--accent);
+  text-transform:uppercase; text-shadow:0 0 10px var(--accent);
+}
+
+/* 顶栏在 SHOW 下保留 (PARTY badge 仍可点) */
+body.mode-show header.topbar{ background:transparent; border:none; box-shadow:none }
+body.mode-show header.topbar .bpm-display{ opacity:.7 }
 
 /* INPUT 模式: 只显示控制台输入区 + 顶栏 (徽章) */
 body.mode-input #code-panel,
@@ -762,6 +830,30 @@ main{
 .tok-num{color:var(--tok-num)}
 .tok-kw{color:var(--tok-kw)}
 .tok-cmt{color:var(--txt-faint);font-style:italic}
+
+/* Hydra WebGL 视觉合成器 — 全屏 overlay
+   - 默认/PARTY 模式: z-index:55 (在 panel 之上, modal 之下), opacity 0.55, mix-blend:screen, 事件透传
+   - SHOW 模式: z-index:1 主秀, opacity 1, 喇叭/电平浮在上层
+   - 始终 pointer-events:none 让 click 透到 UI */
+#hydra-canvas{
+  position:fixed;inset:0;width:100vw;height:100vh;
+  pointer-events:none;
+  z-index:55;            /* 在 panel (1) 之上, modal (100) 之下 */
+  background:transparent;
+  opacity:.55;
+  mix-blend-mode:screen; /* 黑色像素自动透明, 跟 Strudel 视觉一致风格 */
+  display:none;          /* 默认隐藏, 收到 visual 字段后 JS 启用 */
+}
+body.hydra-on #hydra-canvas{ display:block }
+
+/* SHOW 模式: hydra 是主秀, 沉到背景层, 不再透明也不混合 */
+body.mode-show.hydra-on #hydra-canvas{
+  z-index:1;
+  opacity:1;
+  mix-blend-mode:normal;
+  background:#0a0b0e;
+}
+body.mode-show.hydra-on #show-stage{ z-index:3 }
 
 /* Strudel visual overlay — 全屏 canvas, 不挡 UI 输入
    mix-blend-mode:screen 让黑色像素自动透明,只保留亮色音符/波形 */

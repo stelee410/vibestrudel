@@ -5,11 +5,12 @@ import { getSession, createSession } from "../lib/redis.js";
 const newId = customAlphabet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 10);
 
 export default async function sessionsRoutes(fastify) {
-  // 创建 session
+  // 创建 session — body 可选 { bpm: 40..240, style: "techno"/..., custom: 自由文本 (<500字, 创建者意图: 调式/和弦/编制等) }
   fastify.post("/sessions", async (req, reply) => {
     const id = newId();
-    await createSession(id);
-    return { id, code: "", seq: 0 };
+    const { bpm, style, custom } = req.body || {};
+    const session = await createSession(id, { bpm, style, custom });
+    return { id, code: "", seq: 0, bpmLock: session.bpmLock, styleHint: session.styleHint, customHint: session.customHint };
   });
 
   // GET /s/:id/code — 拉取 session 当前状态(轮询入口)

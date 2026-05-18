@@ -33,7 +33,7 @@ export async function setSession(id, data) {
   await redis.set(KEY(id), JSON.stringify(data), "EX", TTL);
 }
 
-export async function createSession(id) {
+export async function createSession(id, opts = {}) {
   const data = {
     code: "",
     seq: 0,
@@ -41,6 +41,11 @@ export async function createSession(id) {
     lastAt: Date.now(),
     explanation: null,
     sourceTag: null,    // "own" | "cloud"
+    // 创建时可锁定的会话级配置, AI 生成时一定遵守
+    bpmLock: Number.isFinite(opts.bpm) && opts.bpm >= 40 && opts.bpm <= 240 ? Math.round(opts.bpm) : null,
+    styleHint: typeof opts.style === "string" && opts.style.length <= 40 ? opts.style.trim() : null,
+    customHint: typeof opts.custom === "string" && opts.custom.trim().length > 0
+      ? opts.custom.trim().slice(0, 500) : null,
   };
   await setSession(id, data);
   return data;
@@ -104,7 +109,8 @@ export async function consumeSelfRateLimit(ip, perIpSec) {
 // === 多轮对话历史 (per-session) ===
 // 存最近 N 轮 [user, model] 让 LLM 看得到前面在聊什么 — 用户能说"再暗一点"了
 const HIST_KEY = (id) => `history:${id}`;
-const HIST_MAX_TURNS = 10;   // 5 个 user + 5 个 model = 5 个 exchange
+const HIST_MAX_TURNS = 24;   // 12 个 user + 12 个 model = 12 个 exchange
+const HIST_RECENT_FULL = 12; // 最近 6 轮保留完整 code, 更早只留 user 文字+简短摘要
 
 export async function getHistory(id) {
   const raw = await redis.get(HIST_KEY(id));
@@ -116,6 +122,22 @@ export async function getHistory(id) {
 export async function appendHistory(id, role, text) {
   const cur = await getHistory(id);
   cur.push({ role, text });
+  // 超过最近窗口的 model 回复, 压缩成只保留 explanation, 省 token
+  if (cur.length > HIST_RECENT_FULL) {
+    for (let i = 0; i < cur.length - HIST_RECENT_FULL; i++) {
+      const entry = cur[i];
+      if (entry.role === "model" && entry.text && entry.text.length > 200) {
+        try {
+          const parsed = JSON.parse(entry.text);
+          // 旧的 model 回复只留 explanation, code 用占位
+          entry.text = JSON.stringify({
+            code: "// (omitted — earlier turn)",
+            explanation: parsed.explanation || "",
+          });
+        } catch(_){}
+      }
+    }
+  }
   while (cur.length > HIST_MAX_TURNS) cur.shift();
   await redis.set(HIST_KEY(id), JSON.stringify(cur), "EX", TTL);
 }

@@ -165,6 +165,40 @@
 
   /* CTA */
   .cta-row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:60px}
+  /* 创建房间选项 — BPM 锁 + 风格模板 */
+  .create-opts{
+    display:flex;justify-content:center;gap:24px;margin:24px 0 16px;flex-wrap:wrap;
+  }
+  .create-opt{
+    display:flex;flex-direction:column;gap:6px;text-align:left;
+  }
+  .opt-label{
+    font-family:var(--font-mono);font-size:10px;letter-spacing:.22em;color:var(--mint);
+    text-transform:uppercase;
+  }
+  .opt-input{
+    width:180px;padding:9px 12px;
+    font-family:var(--font-mono);font-size:13px;
+    background:#0e1014;color:#d4dde6;
+    border:1px solid #2a4537;border-radius:6px;outline:none;
+    transition:.15s;
+  }
+  .opt-input:focus{border-color:var(--mint);box-shadow:0 0 0 2px #7cffb633}
+  select.opt-input{appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--mint) 50%),linear-gradient(135deg,var(--mint) 50%,transparent 50%);background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;background-size:5px 5px, 5px 5px;background-repeat:no-repeat;padding-right:32px}
+  .opt-hint{font-family:var(--font-mono);font-size:9px;color:#5a6370;letter-spacing:.1em;text-transform:uppercase}
+  .create-opt-wide{flex:1;max-width:520px;min-width:280px}
+  .create-opt-wide .opt-input{width:100%}
+  .opt-textarea{
+    resize:vertical;min-height:44px;max-height:120px;
+    font-family:var(--font-mono);font-size:12px;line-height:1.5;
+    padding:8px 12px;
+  }
+  .opt-textarea::placeholder{color:#4a525c;font-style:italic}
+  @media (max-width:600px){
+    .create-opts{gap:14px;margin:18px 0 12px}
+    .opt-input{width:150px}
+  }
+
   .cta-primary{
     font-family:var(--font-mono);font-weight:800;font-size:13px;letter-spacing:.2em;
     text-transform:uppercase;color:#0a0b0e;
@@ -500,6 +534,42 @@
       <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
     </div>
 
+    <!-- 创建前的可选锁定 — BPM + 风格模板 (空 = 不限制) -->
+    <div class="create-opts" id="create-opts">
+      <label class="create-opt">
+        <span class="opt-label" data-i18n="landing.opt.bpm">BPM</span>
+        <input class="opt-input" id="opt-bpm" type="number" min="60" max="200" step="1" placeholder="auto" inputmode="numeric">
+        <span class="opt-hint" data-i18n="landing.opt.bpm_hint">empty = AI decides</span>
+      </label>
+      <label class="create-opt">
+        <span class="opt-label" data-i18n="landing.opt.style">STYLE</span>
+        <select class="opt-input" id="opt-style">
+          <option value=""></option>
+          <option value="techno">techno (drone-driven)</option>
+          <option value="house">house (4-on-floor groove)</option>
+          <option value="ambient">ambient (sparse pads)</option>
+          <option value="lofi">lo-fi (warm jazz chords)</option>
+          <option value="dnb">drum & bass (fast breakbeats)</option>
+          <option value="dub">dub (heavy delay/reverb)</option>
+          <option value="cinematic">cinematic (orchestral textures)</option>
+          <option value="acid">acid (303-style)</option>
+          <option value="experimental">experimental (free-form)</option>
+        </select>
+        <span class="opt-hint" data-i18n="landing.opt.style_hint">empty = no constraint</span>
+      </label>
+    </div>
+
+    <!-- 自由文本: 全局设定注入 (调式/和弦/编制/特殊要求, 应用于每一次 AI 生成) -->
+    <div class="create-opts" id="create-opts-custom">
+      <label class="create-opt create-opt-wide">
+        <span class="opt-label" data-i18n="landing.opt.custom">CUSTOM RULES</span>
+        <textarea class="opt-input opt-textarea" id="opt-custom" rows="2" maxlength="500"
+          data-i18n-attr="placeholder:landing.opt.custom_placeholder"
+          placeholder="只用 A 多利亚调式 · 只允许打击乐 · 必须有 pad 铺底..."></textarea>
+        <span class="opt-hint" data-i18n="landing.opt.custom_hint">free-form: scale / harmony / instrumentation / any rule the room must follow</span>
+      </label>
+    </div>
+
     <div class="cta-row">
       <button class="cta-primary" id="create-btn">
         <span class="text" data-i18n="landing.cta_primary">CREATE SESSION · New Room</span>
@@ -684,7 +754,20 @@
     btn.classList.add("loading");
     btn.querySelector(".text").textContent = I18N.t("landing.creating");
     try{
-      const res = await fetch("/sessions", { method: "POST" });
+      // 读 BPM + 风格选项 (空 = 不传)
+      const bpmEl = document.getElementById("opt-bpm");
+      const styleEl = document.getElementById("opt-style");
+      const customEl = document.getElementById("opt-custom");
+      const body = {};
+      const bpmVal = bpmEl && bpmEl.value ? parseInt(bpmEl.value, 10) : null;
+      if (Number.isFinite(bpmVal) && bpmVal >= 40 && bpmVal <= 240) body.bpm = bpmVal;
+      if (styleEl && styleEl.value) body.style = styleEl.value;
+      if (customEl && customEl.value && customEl.value.trim()) body.custom = customEl.value.trim();
+      const res = await fetch("/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!res.ok) throw new Error("server returned " + res.status);
       const { id } = await res.json();
       const partyUrl = `${location.origin}/app/${id}`;
