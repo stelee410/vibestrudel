@@ -75,6 +75,14 @@
       <span class="mode-badge mode-show-only" data-i18n="mode.show">📺 SHOW</span>
       <span class="mode-badge mode-input-only" data-i18n="mode.input">🎛 INPUT</span>
       <span class="mode-badge mode-control-only" data-i18n="mode.control">✦ CONTROL</span>
+      <!-- Hydra opacity 滑块 — 只在 hydra-on 时显示 -->
+      <label class="hydra-ctl" id="hydra-ctl" title="VJ opacity (Hydra 视觉透明度)">
+        <span class="hydra-ctl-label">VJ</span>
+        <input type="range" id="hydra-opacity" min="0" max="100" step="1" value="55">
+        <span class="hydra-ctl-val" id="hydra-opacity-val">55</span>
+      </label>
+      <!-- PAPER FX 切换 — 印刷品质感叠加 (noise/grain/vignette/wordmark, 跟 sonara.fm 风格) -->
+      <button class="paper-btn" id="paper-btn" title="PAPER FX — 印刷品/胶片质感叠加" aria-pressed="false">PAPER</button>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -386,6 +394,15 @@
 
 <!-- ============== HYDRA 全屏背景视觉 (z-index 0, panel 之下) ============== -->
 <canvas id="hydra-canvas" aria-hidden="true"></canvas>
+
+<!-- ============== PAPER FX 叠加 — 多层印刷品/胶片质感 (sonara.fm 风格) ============== -->
+<div id="paper-overlay" aria-hidden="true">
+  <div class="paper-tint"></div>      <!-- 米黄纸色弱填充 (mix-blend overlay) -->
+  <div class="paper-noise"></div>     <!-- SVG fractalNoise 纸纹 (静态) -->
+  <div class="paper-grain"></div>     <!-- film grain 颗粒 (静态, 不同 scale) -->
+  <div class="paper-vignette"></div>  <!-- 4 角双向 linear-gradient 暗角 -->
+  <span class="paper-wordmark" id="paper-wordmark">vibe</span>  <!-- amp 联动 wordmark, SHOW 模式下显示 -->
+</div>
 
 <!-- ============== STRUDEL VISUAL OVERLAY (全屏, z-index 60 在 panel 之上) ============== -->
 <canvas id="test-canvas" aria-hidden="true"></canvas>
@@ -1048,6 +1065,54 @@
   // 暴露给后面的 evaluatePattern / pollSession 调用
   window.__vibeRunHydra = runHydra;
   window.__vibeStopHydra = stopHydra;
+
+  // === PAPER FX 切换 — 印刷品/胶片质感叠加, 默认 SHOW 模式自动开 ===
+  (function setupPaperFx(){
+    const btn = document.getElementById("paper-btn");
+    if (!btn) return;
+    const KEY = "vibestrudel.paperOn";
+    // SHOW 模式 + 没有显式 user 偏好 → 默认开 (主秀场景需要质感)
+    const isShow = document.body.classList.contains("mode-show")
+                || document.documentElement.classList.contains("mode-show");
+    const stored = localStorage.getItem(KEY);
+    let on = stored === "1" ? true : stored === "0" ? false : isShow;
+    const apply = (v) => {
+      on = !!v;
+      document.body.classList.toggle("paper-on", on);
+      btn.setAttribute("aria-pressed", String(on));
+      localStorage.setItem(KEY, on ? "1" : "0");
+    };
+    apply(on);
+    btn.addEventListener("click", () => apply(!on));
+  })();
+
+  // === --amp CSS 变量同步 (来自 hydra audio bridge) — PAPER wordmark 底线用 ===
+  // 不依赖 PAPER 启用与否, 只要有音频就一直更新, 多个 CSS 选择器都能读
+  (function syncAmpVar(){
+    function tick(){
+      const v = (window.__audioLow || 0).toFixed(3);
+      document.documentElement.style.setProperty("--amp", v);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
+
+  // === Hydra opacity slider (顶栏 VJ 控件) ===
+  (function setupHydraOpacityControl(){
+    const slider = document.getElementById("hydra-opacity");
+    const valEl  = document.getElementById("hydra-opacity-val");
+    if (!slider) return;
+    const saved = parseInt(localStorage.getItem("vibestrudel.hydraOpacity") || "55", 10);
+    const apply = (n) => {
+      n = Math.max(0, Math.min(100, n|0));
+      slider.value = n;
+      if (valEl) valEl.textContent = n;
+      document.documentElement.style.setProperty("--hydra-opacity", (n / 100).toFixed(2));
+      localStorage.setItem("vibestrudel.hydraOpacity", String(n));
+    };
+    apply(saved);
+    slider.addEventListener("input", () => apply(parseInt(slider.value, 10)));
+  })();
 
   async function evaluatePattern(code){
     await ensureStrudel();

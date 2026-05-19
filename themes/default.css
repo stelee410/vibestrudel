@@ -832,7 +832,7 @@ main{
 .tok-cmt{color:var(--txt-faint);font-style:italic}
 
 /* Hydra WebGL 视觉合成器 — 全屏 overlay
-   - 默认/PARTY 模式: z-index:55 (在 panel 之上, modal 之下), opacity 0.55, mix-blend:screen, 事件透传
+   - 默认/PARTY 模式: z-index:55 (在 panel 之上, modal 之下), opacity 可调 (CSS var), mix-blend:screen, 事件透传
    - SHOW 模式: z-index:1 主秀, opacity 1, 喇叭/电平浮在上层
    - 始终 pointer-events:none 让 click 透到 UI */
 #hydra-canvas{
@@ -840,20 +840,152 @@ main{
   pointer-events:none;
   z-index:55;            /* 在 panel (1) 之上, modal (100) 之下 */
   background:transparent;
-  opacity:.55;
+  opacity:var(--hydra-opacity, .55);   /* 默认 0.55, 用户可调 */
   mix-blend-mode:screen; /* 黑色像素自动透明, 跟 Strudel 视觉一致风格 */
   display:none;          /* 默认隐藏, 收到 visual 字段后 JS 启用 */
+  transition:opacity .15s;
 }
 body.hydra-on #hydra-canvas{ display:block }
 
 /* SHOW 模式: hydra 是主秀, 沉到背景层, 不再透明也不混合 */
 body.mode-show.hydra-on #hydra-canvas{
   z-index:1;
-  opacity:1;
+  opacity:1 !important;  /* 覆盖用户 slider — SHOW 模式视觉就该是主体 */
   mix-blend-mode:normal;
   background:#0a0b0e;
 }
 body.mode-show.hydra-on #show-stage{ z-index:3 }
+
+/* ============ PAPER FX — 印刷品/胶片质感叠加 (sonara.fm 风格) ============
+   4 层从下到上:
+   1) paper-tint: 米黄色弱填充, mix-blend:overlay 把整体压向纸色
+   2) paper-noise: SVG fractalNoise 高频纸纹理 (静态)
+   3) paper-grain: 胶片颗粒 (低频, 不同位移)
+   4) paper-vignette: 4 角线性渐变暗角
+   wordmark: amp-reactive 底线, opacity = --amp 实时计算
+*/
+#paper-overlay{
+  position:fixed;inset:0;pointer-events:none;
+  z-index:2;            /* 在 hydra(1) 之上, show-stage(3) 之下 */
+  display:none;
+  isolation:isolate;    /* 让内部 mix-blend 不污染 hydra/UI */
+}
+body.paper-on #paper-overlay{display:block}
+
+/* SHOW 模式: paper 在 hydra 主秀之上 + wordmark 显示 */
+body.mode-show.paper-on #paper-overlay .paper-wordmark{display:block}
+
+/* 1) 纸色 tint */
+.paper-tint{
+  position:absolute;inset:0;
+  background:#ede7d9;   /* sonara --paper */
+  opacity:.08;
+  mix-blend-mode:overlay;
+}
+
+/* 2) SVG fractalNoise 纸纹 (240×240 重复) — 直接 inline data URI, 静态 */
+.paper-noise{
+  position:absolute;inset:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.93  0 0 0 0 0.91  0 0 0 0 0.85  0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size:240px 240px;
+  opacity:.07;
+  mix-blend-mode:overlay;
+}
+
+/* 3) 胶片颗粒 — 较粗噪声, 不同 freq + multiply 加深 */
+.paper-grain{
+  position:absolute;inset:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.4 0'/></filter><rect width='100%25' height='100%25' filter='url(%23g)'/></svg>");
+  background-size:180px 180px;
+  opacity:.05;
+  mix-blend-mode:multiply;
+}
+
+/* 4) 双向暗角 — 4 角变深 */
+.paper-vignette{
+  position:absolute;inset:0;
+  background:
+    linear-gradient(to right,
+      color-mix(in srgb, #1a1612 65%, transparent), transparent 22%, transparent 78%,
+      color-mix(in srgb, #1a1612 65%, transparent)),
+    linear-gradient(to bottom,
+      color-mix(in srgb, #1a1612 50%, transparent), transparent 18%, transparent 78%,
+      color-mix(in srgb, #1a1612 70%, transparent));
+}
+
+/* wordmark — 大字, italic serif, 跟 amp 联动一根底线
+   平时藏, SHOW 模式 + paper-on 才显示 */
+.paper-wordmark{
+  display:none;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:"Fraunces", "Times New Roman", Georgia, serif;
+  font-style:italic;font-weight:500;
+  font-size:16vmin;line-height:1;letter-spacing:-.02em;
+  color:#ede7d9;
+  opacity:.09;
+  user-select:none;
+  /* 呼吸: 4.5s 一周, opacity + scale 微动 */
+  animation:paper-breath 4.5s ease-in-out infinite;
+}
+.paper-wordmark::after{
+  content:"";
+  position:absolute;bottom:2px;left:0;right:0;height:1px;
+  background:#ede7d9;
+  opacity:calc(var(--amp, 0) * 1.6);   /* JS 把 window.__audioLow 写到 --amp 上 */
+  transition:opacity 80ms linear;
+}
+@keyframes paper-breath{
+  0%, 100% { opacity:.07; transform:translate(-50%,-50%) scale(1) }
+  50%      { opacity:.12; transform:translate(-50%,-50%) scale(1.015) }
+}
+
+/* PAPER 按钮 — 独立滤镜组件, 永远可见 (不跟 hydra 绑) */
+.paper-btn{
+  display:inline-flex;align-items:center;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;font-weight:700;
+  color:var(--txt-dim);background:transparent;
+  border:1px solid var(--panel-edge);border-radius:var(--r-ctrl);
+  padding:6px 10px;cursor:pointer;text-transform:uppercase;
+  transition:.15s;
+}
+.paper-btn:hover{color:var(--txt);border-color:var(--accent)}
+body.paper-on .paper-btn{
+  color:#ede7d9;border-color:#c9c0ae;background:#1a1612;
+  box-shadow:inset 0 0 0 1px #c9c0ae40;
+}
+/* INPUT/CONTROL 模式手机端可能太挤, 隐藏 */
+body.mode-input .paper-btn,
+body.mode-control .paper-btn{display:none}
+
+/* 关怀: prefers-reduced-motion 关掉呼吸 */
+@media (prefers-reduced-motion: reduce){
+  .paper-wordmark{animation:none}
+  .paper-wordmark::after{transition:none}
+}
+
+/* 顶栏 VJ opacity 滑块 — 只在 hydra-on 时显示 */
+.hydra-ctl{display:none}
+body.hydra-on .hydra-ctl{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px;border:1px solid var(--panel-edge);border-radius:var(--r-ctrl);
+  background:var(--surface-deep, #0e0f12);
+  cursor:pointer;
+}
+/* SHOW 模式滑块没意义 (强制 opacity:1) — 隐藏 */
+body.mode-show.hydra-on .hydra-ctl{display:none}
+.hydra-ctl-label{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
+  color:var(--accent);font-weight:700;
+}
+.hydra-ctl-val{
+  font-family:var(--font-mono);font-size:10px;
+  color:var(--txt-dim);min-width:18px;text-align:right;
+}
+.hydra-ctl input[type=range]{
+  width:80px;height:14px;
+  accent-color:var(--accent);
+  cursor:pointer;
+}
 
 /* Strudel visual overlay — 全屏 canvas, 不挡 UI 输入
    mix-blend-mode:screen 让黑色像素自动透明,只保留亮色音符/波形 */

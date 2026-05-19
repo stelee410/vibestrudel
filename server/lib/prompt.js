@@ -78,6 +78,16 @@ CRITICAL: .color() ALONE shows nothing.
 ABSOLUTELY FORBIDDEN (NOT exported, will throw "is not defined"):
   ❌ scope()  ❌ spectrum()  ❌ pianoroll() top-level (no chain)  ❌ punchcard() top-level
 
+⚠️ DO NOT OVER-DEFENSIVELY AVOID VISUAL FUNCTIONS based on past console errors.
+If conversation history shows errors like:
+  "[getTrigger] error: Failed to construct 'AudioWorkletNode'"
+  "AudioWorkletNode cannot be created: AudioWorklet does not have a valid AudioWorkletGlobalScope"
+these are CLIENT-SIDE INIT RACE conditions (Strudel worklet not yet loaded when first
+evaluate runs). The client already auto-retries after 500ms — it will resolve itself.
+DO NOT remove .scope() / .fscope() / .spectrum() / .pianoroll() to "avoid" these errors.
+They are safe to use. Pick the visual function that fits the user request, not the one
+that seems "safer" because of past noise in the log.
+
 VISUAL POLICY — DEFAULT IS NO VISUAL.
 
 DO NOT add ANY visual call (.pianoroll / .punchcard / .scope / .spectrum / .spiral / .pitchwheel / .wordfall / .fscope / .color)
