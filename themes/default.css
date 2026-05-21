@@ -296,6 +296,35 @@ body.mode-show #show-stage{
   padding:4vmin;
   pointer-events:none;        /* 不挡 modal/topbar 交互 */
   z-index:2;
+  overflow:hidden;
+}
+body.mode-show #show-stage::after{
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(circle at 50% 42%, transparent 0 34%, #00000032 70%, #00000080 100%),
+    linear-gradient(180deg, #00000020, #00000070);
+}
+.show-bg-layer{
+  position:absolute; inset:0; z-index:0; overflow:hidden;
+  background:#06070a;
+}
+.show-bg-layer img{
+  width:100%; height:100%; object-fit:cover; display:block;
+  opacity:.74;
+  transform:scale(calc(1.02 + var(--amp, 0) * .035));
+  filter:
+    brightness(calc(.62 + var(--amp, 0) * .16))
+    contrast(1.16)
+    saturate(calc(.9 + var(--amp, 0) * .3));
+  transition:opacity .24s ease, filter 80ms linear, transform 80ms linear;
+}
+.show-bg-layer::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(90deg, #00000044, transparent 24%, transparent 76%, #00000044),
+    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 4px);
+  mix-blend-mode:overlay;
+  opacity:.5;
 }
 .show-art{
   width:min(50vmin, 480px); aspect-ratio:1/1;
@@ -303,6 +332,7 @@ body.mode-show #show-stage{
   color:var(--accent);
   filter:drop-shadow(0 0 30px var(--accent)) drop-shadow(0 0 60px #ff6b3550);
   animation:show-pulse 2.2s ease-in-out infinite;
+  z-index:2;
 }
 body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 /* 自定义图片样式 */
@@ -325,6 +355,18 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 .show-art[data-active="image-warp"]   .scene-image-warp,
 .show-art[data-active="image-pulse"]  .scene-image-pulse,
 .show-art[data-active="particles"]    .scene-particles { display:block }
+.show-art[data-active="image-warp"],
+.show-art[data-active="image-pulse"],
+.show-art[data-active="particles"]{
+  position:absolute; inset:0; width:100%; height:100%; aspect-ratio:auto;
+  filter:none; animation:none; color:var(--accent);
+}
+.show-art[data-active="image-warp"] + .show-level,
+.show-art[data-active="image-pulse"] + .show-level,
+.show-art[data-active="particles"] + .show-level{
+  position:relative; z-index:3;
+  transform:translateY(30vmin);
+}
 
 /* Scene 2: vinyl 旋转 — 持续顺时针, 速度跟 BPM 联动 (CSS var --vinyl-rpm 由 JS 写) */
 .vinyl-disc{
@@ -371,6 +413,11 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   border-radius:14px; overflow:hidden;
   background:#0a0b0e;
 }
+.show-art[data-active="image-warp"] .scene-image-warp{
+  border-radius:0;
+  opacity:.94;
+  mix-blend-mode:screen;
+}
 
 /* Scene 7: image-pulse — img 元素 CSS filter/transform 跟 --amp 联动 */
 .scene-image-pulse{
@@ -379,6 +426,11 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   display:none;
   position:absolute; inset:0;
   /* 当父 .show-art[data-active="image-pulse"] 时, display:block 由全局规则给 */
+}
+.show-art[data-active="image-pulse"] .scene-image-pulse{
+  border-radius:0;
+  opacity:.78;
+  mix-blend-mode:screen;
 }
 .img-pulse-el{
   width:100%; height:100%; object-fit:cover; display:block;
@@ -399,14 +451,23 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   pointer-events:none;
 }
 /* image src 有内容时藏 hint */
+.scene-image-warp.has-img .scene-hint,
 .scene-image-pulse.has-img .scene-hint-overlay{display:none}
 
 /* Scene 8: particles — canvas 全填充 */
 .scene-particles{background:#08090c;border-radius:14px;overflow:hidden}
 .particles-canvas{width:100%;height:100%;display:block}
+.show-art[data-active="particles"] .scene-particles{
+  border-radius:0;
+  background:
+    radial-gradient(circle at 50% 45%, #15110b33, transparent 55%),
+    #050507;
+  mix-blend-mode:screen;
+}
 
 /* SCENE 切换按钮 — 永远可见 (PARTY 模式可预选, SHOW 模式生效) */
-.scene-btn{
+.scene-btn,
+.bg-btn{
   display:inline-flex;align-items:center;
   font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;font-weight:700;
   color:var(--accent);background:transparent;
@@ -414,10 +475,14 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   padding:6px 10px;cursor:pointer;text-transform:uppercase;
   transition:.15s;min-width:90px;
 }
-.scene-btn:hover{color:var(--txt);border-color:var(--accent)}
+.bg-btn{min-width:112px}
+.scene-btn:hover,
+.bg-btn:hover{color:var(--txt);border-color:var(--accent)}
 /* INPUT/CONTROL 模式手机端隐藏 (顶栏紧) */
 body.mode-input .scene-btn,
-body.mode-control .scene-btn{display:none}
+body.mode-input .bg-btn,
+body.mode-control .scene-btn,
+body.mode-control .bg-btn{display:none}
 @keyframes show-pulse{
   0%, 100% { transform:scale(1); opacity:.92 }
   50%      { transform:scale(1.04); opacity:1 }
@@ -427,6 +492,7 @@ body.mode-control .scene-btn{display:none}
 .show-level{
   width:min(60vmin, 600px);
   display:flex; flex-direction:column; align-items:center; gap:12px;
+  position:relative; z-index:3;
 }
 .show-level-bars{
   display:flex; gap:4px; height:9vmin; max-height:96px; width:100%;

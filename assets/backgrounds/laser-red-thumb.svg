@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 1280 1280">
+  <defs>
+    <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" seed="17"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="table" tableValues="0 .18"/></feComponentTransfer>
+    </filter>
+    <filter id="rough" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="4" seed="8" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="28" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <radialGradient id="vignette" cx="50%" cy="48%" r="72%">
+      <stop offset="58%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000" stop-opacity=".72"/>
+    </radialGradient>
+    
+  </defs>
+  <rect width="1280" height="1280" fill="#07080b"/>
+  
+      <rect width="1280" height="1280" fill="#080102"/>
+      <radialGradient id="g17" cx="50%" cy="58%" r="55%"><stop stop-color="#ff2a1f" stop-opacity=".55"/><stop offset=".4" stop-color="#3d0307" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+      <rect width="1280" height="1280" fill="url(#g17)"/>
+      <path d="M0 694 L1280 694" stroke="#ff3028" stroke-width="12"/>
+      <path d="M640 694 L-260 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L-182 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L-104 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L-26 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L52 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L130 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L208 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L286 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L364 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L442 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L520 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L598 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L676 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L754 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L832 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L910 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L988 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1066 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1144 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1222 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1300 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1378 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1456 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/><path d="M640 694 L1534 1280" stroke="#ff3028" stroke-width="3" opacity=".7"/>
+      <path d="M0 760 L1280 760" stroke="#ff3028" stroke-width="2" opacity="0.18"/><path d="M0 798 L1280 798" stroke="#ff3028" stroke-width="2" opacity="0.215"/><path d="M0 836 L1280 836" stroke="#ff3028" stroke-width="2" opacity="0.25"/><path d="M0 874 L1280 874" stroke="#ff3028" stroke-width="2" opacity="0.28500000000000003"/><path d="M0 912 L1280 912" stroke="#ff3028" stroke-width="4" opacity="0.32"/><path d="M0 950 L1280 950" stroke="#ff3028" stroke-width="4" opacity="0.355"/><path d="M0 988 L1280 988" stroke="#ff3028" stroke-width="4" opacity="0.39"/><path d="M0 1026 L1280 1026" stroke="#ff3028" stroke-width="4" opacity="0.42500000000000004"/><path d="M0 1064 L1280 1064" stroke="#ff3028" stroke-width="4" opacity="0.46"/><path d="M0 1102 L1280 1102" stroke="#ff3028" stroke-width="4" opacity="0.49500000000000005"/><path d="M0 1140 L1280 1140" stroke="#ff3028" stroke-width="4" opacity="0.53"/><path d="M0 1178 L1280 1178" stroke="#ff3028" stroke-width="4" opacity="0.565"/><path d="M0 1216 L1280 1216" stroke="#ff3028" stroke-width="4" opacity="0.6000000000000001"/><path d="M0 1254 L1280 1254" stroke="#ff3028" stroke-width="4" opacity="0.635"/><path d="M0 1292 L1280 1292" stroke="#ff3028" stroke-width="4" opacity="0.67"/>
+      <path d="M640 0 L640 1280" stroke="#ff3028" stroke-width="4" opacity=".75"/>
+    
+  <rect width="1280" height="1280" fill="url(#vignette)"/>
+  <rect width="1280" height="1280" filter="url(#grain)" opacity=".75"/>
+</svg>
