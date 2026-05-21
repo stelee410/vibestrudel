@@ -305,9 +305,119 @@ body.mode-show #show-stage{
   animation:show-pulse 2.2s ease-in-out infinite;
 }
 body.mode-show.is-playing .show-art{ animation-duration:0.6s }
-.show-art svg, .show-art img{
+/* 自定义图片样式 */
+.show-art .show-art-custom{
   width:100%; height:100%; object-fit:contain; display:block;
 }
+/* Scene 容器 — 所有 scene 默认隐藏, 由 data-active 选当前
+   注意: 不要再写 .show-art svg{...display:block}, 那会盖过 .show-art-scene 的 display:none */
+.show-art{position:relative}
+.show-art-scene{
+  position:absolute; inset:0;
+  width:100%; height:100%; object-fit:contain;
+  display:none;
+}
+.show-art[data-active="speaker"]      .scene-speaker,
+.show-art[data-active="vinyl"]        .scene-vinyl,
+.show-art[data-active="radar"]        .scene-radar,
+.show-art[data-active="wave"]         .scene-wave,
+.show-art[data-active="bars"]         .scene-bars,
+.show-art[data-active="image-warp"]   .scene-image-warp,
+.show-art[data-active="image-pulse"]  .scene-image-pulse,
+.show-art[data-active="particles"]    .scene-particles { display:block }
+
+/* Scene 2: vinyl 旋转 — 持续顺时针, 速度跟 BPM 联动 (CSS var --vinyl-rpm 由 JS 写) */
+.vinyl-disc{
+  transform-origin:120px 120px;
+  animation:vinyl-spin var(--vinyl-spin-dur, 2.5s) linear infinite;
+}
+@keyframes vinyl-spin { to { transform:rotate(360deg) } }
+
+/* Scene 3: radar 扫描线 — 4s 一圈 */
+.radar-sweep{
+  transform-origin:120px 120px;
+  animation:radar-sweep 4s linear infinite;
+}
+@keyframes radar-sweep { to { transform:rotate(360deg) } }
+
+/* Scene 4: wave — Y 方向缩放跟 --amp 联动 (有 base 0.3, kick 时拉到 1.0+) */
+.wave-grp{
+  transform-origin:120px 120px;
+  transform:scaleY(calc(0.3 + var(--amp, 0) * 2.5));
+  transition:transform 80ms linear;
+  animation:wave-shift 1.5s ease-in-out infinite;
+}
+@keyframes wave-shift {
+  0%, 100% { translate:0 0 }
+  50%      { translate:8px 0 }
+}
+
+/* Scene 5: bars — 24 个 bar, JS 每帧改高度 */
+.scene-bars{padding:8% 4%}
+.bars-row{
+  width:100%; height:100%;
+  display:flex; align-items:flex-end; gap:4px;
+}
+.bars-row span{
+  flex:1; min-width:0; height:8%;
+  background:linear-gradient(180deg, currentColor, transparent);
+  border-radius:2px;
+  transition:height 80ms ease-out;
+  box-shadow:0 0 8px currentColor;
+}
+
+/* Scene 6: image-warp — SVG 整个充满, image 元素 + feDisplacementMap 由 JS 写 scale */
+.scene-image-warp{
+  border-radius:14px; overflow:hidden;
+  background:#0a0b0e;
+}
+
+/* Scene 7: image-pulse — img 元素 CSS filter/transform 跟 --amp 联动 */
+.scene-image-pulse{
+  border-radius:14px; overflow:hidden;
+  background:#0a0b0e;
+  display:none;
+  position:absolute; inset:0;
+  /* 当父 .show-art[data-active="image-pulse"] 时, display:block 由全局规则给 */
+}
+.img-pulse-el{
+  width:100%; height:100%; object-fit:cover; display:block;
+  transform:scale(calc(1 + var(--amp, 0) * 0.12));
+  filter:
+    brightness(calc(0.8 + var(--amp, 0) * 0.6))
+    contrast(calc(1.0 + var(--amp, 0) * 0.5))
+    saturate(calc(1.0 + var(--amp, 0) * 0.4));
+  transition:transform 60ms ease-out, filter 60ms ease-out;
+}
+/* 占位提示, 没有图时显示 */
+.scene-hint, .scene-hint-overlay{
+  font-family:var(--font-mono);font-size:10px;color:#7a808a;
+  letter-spacing:.15em;text-transform:lowercase;
+}
+.scene-hint-overlay{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+/* image src 有内容时藏 hint */
+.scene-image-pulse.has-img .scene-hint-overlay{display:none}
+
+/* Scene 8: particles — canvas 全填充 */
+.scene-particles{background:#08090c;border-radius:14px;overflow:hidden}
+.particles-canvas{width:100%;height:100%;display:block}
+
+/* SCENE 切换按钮 — 永远可见 (PARTY 模式可预选, SHOW 模式生效) */
+.scene-btn{
+  display:inline-flex;align-items:center;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;font-weight:700;
+  color:var(--accent);background:transparent;
+  border:1px solid var(--panel-edge);border-radius:var(--r-ctrl);
+  padding:6px 10px;cursor:pointer;text-transform:uppercase;
+  transition:.15s;min-width:90px;
+}
+.scene-btn:hover{color:var(--txt);border-color:var(--accent)}
+/* INPUT/CONTROL 模式手机端隐藏 (顶栏紧) */
+body.mode-input .scene-btn,
+body.mode-control .scene-btn{display:none}
 @keyframes show-pulse{
   0%, 100% { transform:scale(1); opacity:.92 }
   50%      { transform:scale(1.04); opacity:1 }

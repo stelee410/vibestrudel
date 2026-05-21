@@ -2,6 +2,7 @@ import {
   getSession, updateSession,
   addCost, getMonthCost,
   getHistory, appendHistory,
+  tryAcquireSessionLock, releaseSessionLock, getSessionLockTtl,
 } from "../lib/redis.js";
 import { validate, validateHydra } from "../lib/validate.js";
 import { callGemini, estimateCost } from "../lib/llm.js";
@@ -37,6 +38,26 @@ export default async function textRoutes(fastify, opts) {
       return reply.code(500).send({ error: "server_no_llm_key" });
     }
 
+    // === Per-session 串行化锁 — 防止多用户并发 LLM 调用导致 last-writer-wins 历史/code 丢失 ===
+    const lockAcquired = await tryAcquireSessionLock(id, 15000);  // 15s ttl 兜底 (LLM 通常 3-8s)
+    if (!lockAcquired) {
+      const ttlMs = await getSessionLockTtl(id);
+      return reply.code(429).send({
+        reason: "session_busy",
+        error: "session_busy",
+        details: "another user is generating in this session",
+        retry_after_ms: Math.max(500, ttlMs > 0 ? ttlMs : 2000),
+      });
+    }
+
+    // 之后无论何种 return / throw 都必须释放锁; 用闭包包一层
+    try {
+      return await processGeneration();
+    } finally {
+      await releaseSessionLock(id);
+    }
+
+    async function processGeneration() {
     // BPM 优先级: session.bpmLock (创建时锁死) > 当前 code 解析出来的 > 120
     const bpm = cur.bpmLock || extractBpm(cur.code) || 120;
     const curState = extractCurrentState(cur.code);
@@ -178,6 +199,7 @@ If the user request conflicts with these rules, the session creator's rules win.
         lastError = e.message;
       }
     }
+    }   // 关闭 processGeneration
   });
 }
 

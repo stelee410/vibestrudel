@@ -83,6 +83,8 @@
       </label>
       <!-- PAPER FX 切换 — 印刷品质感叠加 (noise/grain/vignette/wordmark, 跟 sonara.fm 风格) -->
       <button class="paper-btn" id="paper-btn" title="PAPER FX — 印刷品/胶片质感叠加" aria-pressed="false">PAPER</button>
+      <!-- SHOW 模式 — 中央 SCENE 切换 (speaker / vinyl / radar / wave / bars) -->
+      <button class="scene-btn" id="scene-btn" title="SHOW SCENE — 中央图案切换 (click cycles)">SCENE: speaker</button>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -370,21 +372,106 @@
 
 <!-- ============== SHOW MODE STAGE — 大喇叭 + 大电平 (只在 mode-show 显示) ============== -->
 <div id="show-stage" aria-hidden="true">
-  <div class="show-art">
+  <div class="show-art" id="show-art">
+    <!-- 自定义图片 (?bg=URL 或 localStorage), 优先级最高 -->
     <img class="show-art-custom" id="show-art-custom" alt="" style="display:none">
-    <svg class="show-art-default" id="show-art-default" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <!-- 大喇叭: 主体 cone + 圆环 + 振膜 -->
+
+    <!-- ========== SCENE 1: speaker (默认) ========== -->
+    <svg class="show-art-scene scene-speaker" data-scene="speaker" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="120" cy="120" r="100" stroke-width="3" opacity=".25"/>
       <circle cx="120" cy="120" r="78" stroke-width="3" opacity=".4"/>
       <circle cx="120" cy="120" r="56" stroke-width="4"/>
       <circle cx="120" cy="120" r="28" fill="currentColor" stroke="none"/>
       <circle cx="120" cy="120" r="10" fill="#0a0b0e" stroke="none"/>
-      <!-- 振膜小孔环 -->
       <circle cx="120" cy="60" r="3" fill="currentColor" stroke="none"/>
       <circle cx="120" cy="180" r="3" fill="currentColor" stroke="none"/>
       <circle cx="60" cy="120" r="3" fill="currentColor" stroke="none"/>
       <circle cx="180" cy="120" r="3" fill="currentColor" stroke="none"/>
     </svg>
+
+    <!-- ========== SCENE 2: vinyl 黑胶 (旋转 + grooves + 中心标) ========== -->
+    <svg class="show-art-scene scene-vinyl" data-scene="vinyl" viewBox="0 0 240 240" aria-hidden="true">
+      <g class="vinyl-disc">
+        <circle cx="120" cy="120" r="115" fill="#0d0e10" stroke="#1a1c20" stroke-width="2"/>
+        <!-- grooves -->
+        <circle cx="120" cy="120" r="105" fill="none" stroke="#1d1f23" stroke-width="1"/>
+        <circle cx="120" cy="120" r="95"  fill="none" stroke="#1d1f23" stroke-width="1"/>
+        <circle cx="120" cy="120" r="85"  fill="none" stroke="#1d1f23" stroke-width="1"/>
+        <circle cx="120" cy="120" r="75"  fill="none" stroke="#1d1f23" stroke-width="1"/>
+        <circle cx="120" cy="120" r="65"  fill="none" stroke="#1d1f23" stroke-width="1"/>
+        <!-- label 中心标 -->
+        <circle cx="120" cy="120" r="50" fill="currentColor"/>
+        <circle cx="120" cy="120" r="6"  fill="#0a0b0e"/>
+        <!-- 反光高光 -->
+        <ellipse cx="80" cy="80" rx="30" ry="8" fill="#ffffff" opacity=".06" transform="rotate(-30 80 80)"/>
+      </g>
+    </svg>
+
+    <!-- ========== SCENE 3: radar 雷达 (扫描线旋转 + 同心圆) ========== -->
+    <svg class="show-art-scene scene-radar" data-scene="radar" viewBox="0 0 240 240" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+      <circle cx="120" cy="120" r="110" stroke-width="1.5" opacity=".25"/>
+      <circle cx="120" cy="120" r="80"  stroke-width="1.5" opacity=".35"/>
+      <circle cx="120" cy="120" r="50"  stroke-width="1.5" opacity=".5"/>
+      <circle cx="120" cy="120" r="20"  stroke-width="1.5" opacity=".7"/>
+      <line x1="10"  y1="120" x2="230" y2="120" stroke-width="1" opacity=".15"/>
+      <line x1="120" y1="10"  x2="120" y2="230" stroke-width="1" opacity=".15"/>
+      <!-- 扫描楔形, CSS 旋转 -->
+      <g class="radar-sweep">
+        <defs>
+          <linearGradient id="radar-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity="0"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity=".7"/>
+          </linearGradient>
+        </defs>
+        <path d="M 120 120 L 230 120 A 110 110 0 0 0 175.55 24.45 Z" fill="url(#radar-grad)" opacity=".5"/>
+      </g>
+      <!-- 中心点 -->
+      <circle cx="120" cy="120" r="4" fill="currentColor"/>
+    </svg>
+
+    <!-- ========== SCENE 4: wave 波形 (sine path 上下幅 = --amp) ========== -->
+    <svg class="show-art-scene scene-wave" data-scene="wave" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+      <!-- 静态低线 -->
+      <line x1="20" y1="120" x2="220" y2="120" stroke="currentColor" stroke-width="1" opacity=".15"/>
+      <!-- 主波 — y 由 CSS scaleY = --amp 缩放 -->
+      <g class="wave-grp">
+        <path d="M 20 120 Q 50 100, 80 120 T 140 120 T 200 120 T 220 120"
+              stroke="currentColor" stroke-width="3" fill="none" opacity=".9"/>
+        <path d="M 20 120 Q 35 95, 50 120 T 80 120 T 110 120 T 140 120 T 170 120 T 200 120 T 220 120"
+              stroke="currentColor" stroke-width="1.5" fill="none" opacity=".4"/>
+      </g>
+      <circle cx="120" cy="120" r="2" fill="currentColor"/>
+    </svg>
+
+    <!-- ========== SCENE 5: bars 频谱条 ========== -->
+    <div class="show-art-scene scene-bars" data-scene="bars">
+      <div class="bars-row" id="show-art-bars"></div>
+    </div>
+
+    <!-- ========== SCENE 6: image-warp 图像液化扭曲 (feDisplacementMap, 跟 audio) ========== -->
+    <svg class="show-art-scene scene-image-warp" data-scene="image-warp" viewBox="0 0 240 240" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <filter id="img-warp-filter" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02 0.02" numOctaves="2" seed="2" result="turb">
+            <animate attributeName="baseFrequency" dur="20s" values="0.018 0.018;0.04 0.04;0.018 0.018" repeatCount="indefinite"/>
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="turb" scale="0" id="img-warp-disp" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+      <image id="image-warp-src" href="" x="0" y="0" width="240" height="240" preserveAspectRatio="xMidYMid slice" filter="url(#img-warp-filter)"/>
+      <text class="scene-hint" x="120" y="120" text-anchor="middle" dominant-baseline="middle" fill="currentColor" opacity=".5" font-size="10" font-family="monospace">add ?bg=URL to your link</text>
+    </svg>
+
+    <!-- ========== SCENE 7: image-pulse 图像脉冲 (filter/scale 跟 audio) ========== -->
+    <div class="show-art-scene scene-image-pulse" data-scene="image-pulse">
+      <img id="image-pulse-src" alt="" class="img-pulse-el" src="">
+      <span class="scene-hint scene-hint-overlay">add ?bg=URL to your link</span>
+    </div>
+
+    <!-- ========== SCENE 8: particles 粒子云 (canvas, 无须图像) ========== -->
+    <div class="show-art-scene scene-particles" data-scene="particles">
+      <canvas id="show-art-particles" class="particles-canvas"></canvas>
+    </div>
   </div>
   <div class="show-level">
     <div class="show-level-bars" id="show-level-bars"></div>
@@ -1207,16 +1294,188 @@
   // 自定义图片: 优先级 ?bg=URL  > localStorage("vibestrudel.showBg") > 默认 SVG
   (function setupShowStage(){
     const customImg = document.getElementById("show-art-custom");
-    const defaultSvg = document.getElementById("show-art-default");
-    if (!customImg || !defaultSvg) return;
+    const showArt = document.getElementById("show-art");
+    const sceneBtn = document.getElementById("scene-btn");
+    if (!customImg || !showArt) return;
+
+    // 自定义图片优先 (无 scene 切换, 仅显示图)
     const qsBg = new URLSearchParams(location.search).get("bg");
     const storedBg = localStorage.getItem("vibestrudel.showBg");
     const url = qsBg || storedBg;
-    if (url) {
-      customImg.onload = () => { customImg.style.display = "block"; defaultSvg.style.display = "none"; };
-      customImg.onerror = () => { customImg.style.display = "none"; defaultSvg.style.display = "block"; };
+    const useCustom = !!url;
+    if (useCustom) {
+      customImg.onload = () => { customImg.style.display = "block"; showArt.removeAttribute("data-active"); };
+      customImg.onerror = () => { customImg.style.display = "none"; setActiveScene(currentScene); };
       customImg.src = url;
       if (qsBg) localStorage.setItem("vibestrudel.showBg", qsBg);
+    }
+
+    // === SCENE 切换 ===
+    const SCENES = ["speaker", "vinyl", "radar", "wave", "bars", "image-warp", "image-pulse", "particles"];
+    let currentScene = localStorage.getItem("vibestrudel.showScene") || "speaker";
+    if (!SCENES.includes(currentScene)) currentScene = "speaker";
+    function setActiveScene(name) {
+      if (!SCENES.includes(name)) return;
+      currentScene = name;
+      showArt.setAttribute("data-active", name);
+      if (sceneBtn) sceneBtn.textContent = "SCENE: " + name;
+      localStorage.setItem("vibestrudel.showScene", name);
+    }
+    if (!useCustom) setActiveScene(currentScene);
+    if (sceneBtn) {
+      sceneBtn.addEventListener("click", () => {
+        const i = SCENES.indexOf(currentScene);
+        setActiveScene(SCENES[(i + 1) % SCENES.length]);
+        // 切到非 custom scene 时把 custom img 藏起来
+        customImg.style.display = "none";
+      });
+    }
+
+    // === bars scene — 24 个 span, 每帧驱动高度 ===
+    const barsRoot = document.getElementById("show-art-bars");
+    const barsEls = [];
+    if (barsRoot) {
+      for (let i = 0; i < 24; i++) {
+        const b = document.createElement("span");
+        barsRoot.appendChild(b);
+        barsEls.push(b);
+      }
+    }
+    function tickArtBars(){
+      if (currentScene !== "bars" || !barsEls.length) {
+        requestAnimationFrame(tickArtBars); return;
+      }
+      const low = window.__audioLow || 0;
+      const mid = window.__audioMid || 0;
+      const hi  = window.__audioHi  || 0;
+      const playing = state.playing;
+      for (let i = 0; i < barsEls.length; i++){
+        const ratio = i / (barsEls.length - 1);
+        // 频段映射: 左1/3低频, 中1/3中频, 右1/3高频
+        let level;
+        if (ratio < 0.33) level = low + Math.random() * 0.15;
+        else if (ratio < 0.66) level = mid + Math.random() * 0.15;
+        else level = hi + Math.random() * 0.15;
+        if (!playing) level = 0.03 + Math.random() * 0.05;
+        const h = Math.min(100, level * 120);
+        barsEls[i].style.height = h.toFixed(0) + "%";
+      }
+      requestAnimationFrame(tickArtBars);
+    }
+    requestAnimationFrame(tickArtBars);
+
+    // === vinyl scene — 转速跟 BPM 联动 (BPM=120 ≈ 2s/转, 真黑胶 33⅓rpm = 1.8s/转) ===
+    function updateVinylSpeed(){
+      const bpm = state.bpm || 120;
+      // 一转 = 2 拍, 2 拍时长 = 60 / bpm * 2 秒
+      const dur = (60 / bpm * 2).toFixed(2);
+      document.documentElement.style.setProperty("--vinyl-spin-dur", dur + "s");
+      setTimeout(updateVinylSpeed, 500);
+    }
+    updateVinylSpeed();
+
+    // === image-warp / image-pulse — 把用户的 ?bg=URL 注入到这两个 scene ===
+    const imageWarpSrc  = document.getElementById("image-warp-src");
+    const imagePulseSrc = document.getElementById("image-pulse-src");
+    const imagePulseRoot = document.querySelector(".scene-image-pulse");
+    function applyBgImage(){
+      const bg = (new URLSearchParams(location.search).get("bg")) || localStorage.getItem("vibestrudel.showBg");
+      if (!bg) return;
+      if (imageWarpSrc) imageWarpSrc.setAttribute("href", bg);
+      if (imagePulseSrc) {
+        imagePulseSrc.src = bg;
+        imagePulseSrc.onload = () => imagePulseRoot && imagePulseRoot.classList.add("has-img");
+        imagePulseSrc.onerror = () => imagePulseRoot && imagePulseRoot.classList.remove("has-img");
+      }
+    }
+    applyBgImage();
+
+    // === image-warp 的 feDisplacementMap scale 跟 audio (kick 砸时液化更剧烈) ===
+    const warpDisp = document.getElementById("img-warp-disp");
+    function tickWarp(){
+      if (currentScene === "image-warp" && warpDisp){
+        const a = (window.__audioLow || 0) * 0.6 + (window.__audioMid || 0) * 0.4;
+        const scale = (4 + a * 60).toFixed(1);  // base 4, kick 时拉到 ~30+
+        warpDisp.setAttribute("scale", scale);
+      }
+      requestAnimationFrame(tickWarp);
+    }
+    requestAnimationFrame(tickWarp);
+
+    // === particles scene — canvas 粒子云, 数量/亮度跟 audio ===
+    const particlesCanvas = document.getElementById("show-art-particles");
+    let particlesCtx = null, particles = [];
+    function initParticles(){
+      if (!particlesCanvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = particlesCanvas.clientWidth || 480;
+      const h = particlesCanvas.clientHeight || 480;
+      particlesCanvas.width = Math.floor(w * dpr);
+      particlesCanvas.height = Math.floor(h * dpr);
+      particlesCtx = particlesCanvas.getContext("2d");
+      particlesCtx.scale(dpr, dpr);
+      // 80 个粒子
+      particles = [];
+      for (let i = 0; i < 80; i++){
+        particles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: (Math.random() - 0.5) * 0.4,
+          r: 1 + Math.random() * 2.5,
+          hue: 20 + Math.random() * 60,  // 暖橙→黄
+          life: Math.random(),
+        });
+      }
+    }
+    function tickParticles(){
+      if (currentScene !== "particles" || !particlesCtx) {
+        requestAnimationFrame(tickParticles); return;
+      }
+      if (!particlesCanvas.width) initParticles();
+      const w = particlesCanvas.clientWidth;
+      const h = particlesCanvas.clientHeight;
+      const ctx = particlesCtx;
+      // 半透明清屏 → 拖尾效果
+      ctx.fillStyle = "rgba(8, 9, 12, 0.18)";
+      ctx.fillRect(0, 0, w, h);
+      const low = window.__audioLow || 0;
+      const hi  = window.__audioHi  || 0;
+      const energy = low * 0.7 + hi * 0.3;
+      for (const p of particles){
+        // kick 时往中心爆开
+        const cx = w / 2, cy = h / 2;
+        const dx = p.x - cx, dy = p.y - cy;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const pushOut = energy * 1.8;
+        p.x += p.vx + (dx / dist) * pushOut;
+        p.y += p.vy + (dy / dist) * pushOut;
+        // wrap
+        if (p.x < 0) p.x = w; else if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h; else if (p.y > h) p.y = 0;
+        p.life += 0.005;
+        if (p.life > 1) p.life = 0;
+        // 渲染
+        const alpha = (0.3 + energy * 1.2) * (0.4 + Math.sin(p.life * Math.PI * 2) * 0.5 + 0.3);
+        const size = p.r * (1 + low * 1.5);
+        ctx.fillStyle = `hsla(${p.hue}, 70%, ${50 + hi * 30}%, ${Math.min(1, alpha)})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      requestAnimationFrame(tickParticles);
+    }
+    // 等 DOM 稳定后初始化 (scene 切换到 particles 时再分配 size)
+    setTimeout(initParticles, 100);
+    requestAnimationFrame(tickParticles);
+
+    // 切到 particles 时 resize canvas
+    const sceneBtn2 = document.getElementById("scene-btn");
+    if (sceneBtn2){
+      sceneBtn2.addEventListener("click", () => {
+        // scene 已切换 (上面 click handler 已跑), 这里给 particles 重新算尺寸
+        setTimeout(initParticles, 50);
+      });
     }
   })();
 
@@ -1710,16 +1969,24 @@ __CODE__
 
     try {
       if (hasOwnKey){
-        // 自带 LLM:客户端调 → PUT /s/:id/code
+        // 自带 LLM:客户端调 → PUT /s/:id/code (session 锁: 房间内串行)
         unlockAudioNow();
         const { code, explanation } = await callLLM(text, state.abortCtrl.signal);
-        const res = await fetch(`/s/${SESSION_ID}/code`, {
-          method: "PUT",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ code, explanation, by }),
-          signal: state.abortCtrl.signal,
-        });
-        const data = await res.json().catch(()=>({}));
+        let data, res;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          res = await fetch(`/s/${SESSION_ID}/code`, {
+            method: "PUT",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ code, explanation, by }),
+            signal: state.abortCtrl.signal,
+          });
+          data = await res.json().catch(()=>({}));
+          if (res.status !== 429 || data.reason !== "session_busy") break;
+          if (attempt >= 3) break;
+          const wait = Math.min(8000, data.retry_after_ms || 1500);
+          log("sys", `⏳ 房间忙, ${Math.ceil(wait/1000)}s 后自动推送 (${attempt+1}/3)...`);
+          await new Promise(r => setTimeout(r, wait + 200));
+        }
         if (!res.ok){
           log("err", `服务端拒绝: ${data.error || res.status}${data.details ? " · " + data.details : ""}`);
           if (data.details){
@@ -1732,16 +1999,25 @@ __CODE__
       } else {
         // 无 key:PUT /s/:id/text → 服务端调 LLM
         unlockAudioNow();
-        const res = await fetch(`/s/${SESSION_ID}/text`, {
-          method: "PUT",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ text, by }),
-          signal: state.abortCtrl.signal,
-        });
-        const data = await res.json().catch(()=>({}));
+        // 自动 retry 包装 — session_busy (429) 时等待并重试, 最多 3 次 (~30s)
+        let data, res;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          res = await fetch(`/s/${SESSION_ID}/text`, {
+            method: "PUT",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ text, by }),
+            signal: state.abortCtrl.signal,
+          });
+          data = await res.json().catch(()=>({}));
+          if (res.status !== 429 || data.reason !== "session_busy") break;
+          if (attempt >= 3) break;  // 重试 3 次还 busy 就放弃
+          const wait = Math.min(15000, data.retry_after_ms || 2000);
+          log("sys", `⏳ 房间内有人正在生成, ${Math.ceil(wait/1000)}s 后自动重试 (${attempt+1}/3)...`);
+          await new Promise(r => setTimeout(r, wait + 200));   // 多等 200ms 避免抢闸
+        }
         if (res.status === 429){
-          const why = {global:"全站 15s 频率",per_ip:"你 60s 冷却",budget_exceeded:"本月预算用完"}[data.reason] || data.reason;
-          log("err", `⏱ ${why} · 还要等 ${data.remainingSec}s`);
+          const why = {session_busy:"房间持续繁忙, 请稍后", budget_exceeded:"本月预算用完"}[data.reason] || data.reason;
+          log("err", `⏱ ${why}`);
         } else if (!res.ok){
           log("err", `云端 LLM: ${data.error || res.status}${data.details ? " · " + data.details : ""}`);
         } else {

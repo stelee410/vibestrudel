@@ -1,4 +1,7 @@
-import { getSession, updateSession } from "../lib/redis.js";
+import {
+  getSession, updateSession,
+  tryAcquireSessionLock, releaseSessionLock, getSessionLockTtl,
+} from "../lib/redis.js";
 import { validate } from "../lib/validate.js";
 
 export default async function codeRoutes(fastify, opts) {
@@ -23,14 +26,29 @@ export default async function codeRoutes(fastify, opts) {
       return reply.code(400).send({ error: "code_invalid", details: v.errors.join("; ") });
     }
 
-    const next = await updateSession(id, {
-      code,
-      explanation,
-      lastBy: sanitizeBy(by),
-      sourceTag: "own",
-    });
+    // Per-session 锁 — 跟 text.js 一致, 自带 LLM 写入也要排队
+    // PUT /code 不调 LLM, 锁 ttl 设短 (3s 够 redis 写完)
+    const lockAcquired = await tryAcquireSessionLock(id, 3000);
+    if (!lockAcquired) {
+      const ttlMs = await getSessionLockTtl(id);
+      return reply.code(429).send({
+        reason: "session_busy",
+        error: "session_busy",
+        retry_after_ms: Math.max(500, ttlMs > 0 ? ttlMs : 1000),
+      });
+    }
 
-    return { seq: next.seq, validated: true };
+    try {
+      const next = await updateSession(id, {
+        code,
+        explanation,
+        lastBy: sanitizeBy(by),
+        sourceTag: "own",
+      });
+      return { seq: next.seq, validated: true };
+    } finally {
+      await releaseSessionLock(id);
+    }
   });
 }
 

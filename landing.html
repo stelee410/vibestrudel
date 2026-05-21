@@ -453,11 +453,20 @@
   .qr-card[data-mode="input"] .qr-label{color:var(--sky)}
   .qr-icon{font-size:13px;opacity:.9}
   .qr-sub{
-    margin-top:4px;font-family:var(--font-mono);font-size:9.5px;
+    display:block;margin-top:4px;
+    font-family:var(--font-mono);font-size:9.5px;
     color:var(--txt-faint);letter-spacing:.04em;
+    text-decoration:none;cursor:pointer;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     direction:rtl;text-align:center;  /* 太长省略号在前面 */
+    transition:color .15s;
   }
+  .qr-sub:hover{
+    color:var(--mint);text-decoration:underline;text-underline-offset:2px;
+  }
+  .qr-card[data-mode="show"]  .qr-sub:hover{color:var(--amber)}
+  .qr-card[data-mode="input"] .qr-sub:hover{color:var(--sky)}
+  .qr-sub:focus-visible{outline:1px solid var(--mint);outline-offset:2px;border-radius:2px}
   .qr-tip{
     text-align:center;margin-top:12px;
     font-family:var(--font-mono);font-size:11px;color:var(--txt-dim);
@@ -605,7 +614,7 @@
             <div class="qr-logo" data-color="orange"></div>
           </div>
           <div class="qr-label" data-i18n="landing.qr.party">PARTY · Full</div>
-          <div class="qr-sub" id="qr-party-url">/app/—</div>
+          <a class="qr-sub" id="qr-party-url" href="#" target="_blank" rel="noopener">/app/—</a>
         </div>
         <div class="qr-card" data-mode="show">
           <div class="qr-canvas-wrap">
@@ -613,7 +622,7 @@
             <div class="qr-logo" data-color="amber"></div>
           </div>
           <div class="qr-label" data-i18n="landing.qr.show">SHOW · Display</div>
-          <div class="qr-sub" id="qr-show-url">/app/—?mode=show</div>
+          <a class="qr-sub" id="qr-show-url" href="#" target="_blank" rel="noopener">/app/—?mode=show</a>
         </div>
         <div class="qr-card" data-mode="input">
           <div class="qr-canvas-wrap">
@@ -621,7 +630,7 @@
             <div class="qr-logo" data-color="blue"></div>
           </div>
           <div class="qr-label" data-i18n="landing.qr.input">INPUT · Controller</div>
-          <div class="qr-sub" id="qr-input-url">/control/—</div>
+          <a class="qr-sub" id="qr-input-url" href="#" target="_blank" rel="noopener">/control/—</a>
         </div>
       </div>
       <div class="qr-tip" data-i18n="landing.qr.tip">📱 Scan any QR code with your phone to join</div>
@@ -775,9 +784,15 @@
       const inputUrl = `${location.origin}/control/${id}`;
       urlInput.value = partyUrl;
       enterLnk.href = `/app/${id}`;
-      document.getElementById("qr-party-url").textContent = `/app/${id}`;
-      document.getElementById("qr-show-url").textContent  = `/app/${id}?mode=show`;
-      document.getElementById("qr-input-url").textContent = `/control/${id}`;
+      const setQrSub = (elId, path, fullUrl) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.textContent = path;
+        el.href = fullUrl;
+      };
+      setQrSub("qr-party-url", `/app/${id}`,           partyUrl);
+      setQrSub("qr-show-url",  `/app/${id}?mode=show`, showUrl);
+      setQrSub("qr-input-url", `/control/${id}`,       inputUrl);
       // 生成三个 QR
       renderQR("qr-party", partyUrl, "#0a0d0b", "#7cffb6");
       renderQR("qr-show",  showUrl,  "#1a130a", "#ffb347");

@@ -107,43 +107,65 @@ export async function consumeSelfRateLimit(ip, perIpSec) {
 }
 
 // === 多轮对话历史 (per-session) ===
-// 存最近 N 轮 [user, model] 让 LLM 看得到前面在聊什么 — 用户能说"再暗一点"了
+// 用 Redis List (RPUSH/LTRIM) 原子操作 — 多客户端并发 append 不丢失 (旧 JSON read-modify-write 有竞态)
 const HIST_KEY = (id) => `history:${id}`;
-const HIST_MAX_TURNS = 24;   // 12 个 user + 12 个 model = 12 个 exchange
-const HIST_RECENT_FULL = 12; // 最近 6 轮保留完整 code, 更早只留 user 文字+简短摘要
+const HIST_MAX_TURNS = 24;   // 12 个 user + 12 个 model
+const HIST_RECENT_FULL = 12; // 最近 N 轮保留 model 完整 code, 更早只读时按需压缩
 
 export async function getHistory(id) {
-  const raw = await redis.get(HIST_KEY(id));
-  if (!raw) return [];
+  const items = await redis.lrange(HIST_KEY(id), 0, -1);
   await redis.expire(HIST_KEY(id), TTL);
-  try { return JSON.parse(raw); } catch { return []; }
+  const parsed = items.map(s => {
+    try { return JSON.parse(s); } catch { return null; }
+  }).filter(Boolean);
+  // 读时按需压缩老 model 回复 (省 LLM token), 存储不变
+  const recentStart = Math.max(0, parsed.length - HIST_RECENT_FULL);
+  for (let i = 0; i < recentStart; i++) {
+    const e = parsed[i];
+    if (e.role === "model" && e.text && e.text.length > 200) {
+      try {
+        const p = JSON.parse(e.text);
+        e.text = JSON.stringify({
+          code: "// (omitted — earlier turn)",
+          explanation: p.explanation || "",
+          visual: "",
+        });
+      } catch(_){}
+    }
+  }
+  return parsed;
 }
 
 export async function appendHistory(id, role, text) {
-  const cur = await getHistory(id);
-  cur.push({ role, text });
-  // 超过最近窗口的 model 回复, 压缩成只保留 explanation, 省 token
-  if (cur.length > HIST_RECENT_FULL) {
-    for (let i = 0; i < cur.length - HIST_RECENT_FULL; i++) {
-      const entry = cur[i];
-      if (entry.role === "model" && entry.text && entry.text.length > 200) {
-        try {
-          const parsed = JSON.parse(entry.text);
-          // 旧的 model 回复只留 explanation, code 用占位
-          entry.text = JSON.stringify({
-            code: "// (omitted — earlier turn)",
-            explanation: parsed.explanation || "",
-          });
-        } catch(_){}
-      }
-    }
-  }
-  while (cur.length > HIST_MAX_TURNS) cur.shift();
-  await redis.set(HIST_KEY(id), JSON.stringify(cur), "EX", TTL);
+  // RPUSH + LTRIM 原子, 多 client 并发 append 全保留 (旧版 get→push→set 是 last-write-wins)
+  const entry = JSON.stringify({ role, text });
+  await redis.rpush(HIST_KEY(id), entry);
+  await redis.ltrim(HIST_KEY(id), -HIST_MAX_TURNS, -1);
+  await redis.expire(HIST_KEY(id), TTL);
 }
 
 export async function clearHistory(id) {
   await redis.del(HIST_KEY(id));
+}
+
+// === Session 锁 — 防多用户并发 LLM 写 race (last-writer-wins 历史/code 丢失) ===
+// 锁是 per-session 的, 不同 session 之间不阻塞
+const LOCK_KEY = (id) => `lock:session:${id}`;
+
+export async function tryAcquireSessionLock(id, ttlMs = 12000) {
+  // SET NX PX — 只在 key 不存在时设, ttl ms (自动过期防止进程崩溃留死锁)
+  // ioredis 写法: redis.set(key, value, "PX", ttlMs, "NX")
+  const result = await redis.set(LOCK_KEY(id), "1", "PX", ttlMs, "NX");
+  return result === "OK";
+}
+
+export async function releaseSessionLock(id) {
+  await redis.del(LOCK_KEY(id));
+}
+
+// 返回锁剩余 ms (-2 = 不存在, -1 = 无 ttl)
+export async function getSessionLockTtl(id) {
+  return await redis.pttl(LOCK_KEY(id));
 }
 
 // === stats ===
