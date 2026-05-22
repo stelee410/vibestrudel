@@ -5,6 +5,7 @@ import sessionsRoutes from "./routes/sessions.js";
 import codeRoutes from "./routes/code.js";
 import textRoutes from "./routes/text.js";
 import metaRoutes from "./routes/meta.js";
+import optimizeRoutes from "./routes/optimize.js";
 
 import { loadValidNames } from "./lib/samples.js";
 import { redis } from "./lib/redis.js";
@@ -33,6 +34,7 @@ await fastify.register(sessionsRoutes);
 await fastify.register(codeRoutes, { validNames });
 await fastify.register(textRoutes, { validNames });
 await fastify.register(metaRoutes);
+await fastify.register(optimizeRoutes);
 
 // 优雅退出
 process.on("SIGINT", () => shutdown());

@@ -122,6 +122,8 @@ body::after{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:51;opacity:var(--show-grain);
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .35 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
+body.mode-show::before,
+body.mode-show::after{display:none}
 
 #app{
   display:grid;
@@ -281,50 +283,57 @@ body.mode-show .leds .led[data-color="amber"]   /* AUDIO LED 在 stage label 表
 { display:none !important }
 
 body.mode-show #app{
-  grid-template-rows: 64px 1fr;   /* topbar + stage */
+  grid-template-rows: 1fr;        /* topbar 已脱流变 fixed 浮层, grid 只剩 stage */
   grid-template-columns: 1fr;
+  padding:0;
+  gap:0;
+  pointer-events:none;
+  background:transparent;
 }
 
 /* === Stage 容器 === */
 #show-stage{display:none}
 body.mode-show #show-stage{
   display:flex;
-  position:fixed; top:64px; left:0; right:0; bottom:0;
+  position:fixed; inset:0;
   flex-direction:column;
   align-items:center; justify-content:center;
   gap:6vmin;
   padding:4vmin;
   pointer-events:none;        /* 不挡 modal/topbar 交互 */
-  z-index:2;
+  z-index:30;
   overflow:hidden;
+  background:transparent;
+  isolation:isolate;
 }
 body.mode-show #show-stage::after{
-  content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
-  background:
-    radial-gradient(circle at 50% 42%, transparent 0 34%, #00000032 70%, #00000080 100%),
-    linear-gradient(180deg, #00000020, #00000070);
+  content:none;
 }
+/* SHOW 模式全屏背景层 — 唯一负责铺满视口的底图层, 不再承担暗角/顶栏空间 */
+#show-bg-layer{
+  position:fixed; inset:0; z-index:0; overflow:hidden;
+  background:#06070a;
+  display:none;
+  pointer-events:none;
+}
+body.mode-show #show-bg-layer{display:block}
+/* 兼容旧的 .show-bg-layer class 选择器, 内部 img 样式仍然命中 */
 .show-bg-layer{
-  position:absolute; inset:0; z-index:0; overflow:hidden;
+  position:fixed; inset:0; z-index:0; overflow:hidden;
   background:#06070a;
 }
 .show-bg-layer img{
   width:100%; height:100%; object-fit:cover; display:block;
-  opacity:.74;
+  opacity:.9;
   transform:scale(calc(1.02 + var(--amp, 0) * .035));
   filter:
-    brightness(calc(.62 + var(--amp, 0) * .16))
-    contrast(1.16)
-    saturate(calc(.9 + var(--amp, 0) * .3));
+    brightness(calc(.78 + var(--amp, 0) * .12))
+    contrast(1.08)
+    saturate(calc(.95 + var(--amp, 0) * .22));
   transition:opacity .24s ease, filter 80ms linear, transform 80ms linear;
 }
 .show-bg-layer::after{
-  content:""; position:absolute; inset:0; pointer-events:none;
-  background:
-    linear-gradient(90deg, #00000044, transparent 24%, transparent 76%, #00000044),
-    repeating-linear-gradient(0deg, #ffffff08 0 1px, transparent 1px 4px);
-  mix-blend-mode:overlay;
-  opacity:.5;
+  content:none;
 }
 .show-art{
   width:min(50vmin, 480px); aspect-ratio:1/1;
@@ -355,17 +364,22 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 .show-art[data-active="image-warp"]   .scene-image-warp,
 .show-art[data-active="image-pulse"]  .scene-image-pulse,
 .show-art[data-active="particles"]    .scene-particles { display:block }
+/* image-warp / image-pulse 才全屏 — particles 保持 50vmin 居中框 */
 .show-art[data-active="image-warp"],
-.show-art[data-active="image-pulse"],
-.show-art[data-active="particles"]{
+.show-art[data-active="image-pulse"]{
   position:absolute; inset:0; width:100%; height:100%; aspect-ratio:auto;
   filter:none; animation:none; color:var(--accent);
 }
 .show-art[data-active="image-warp"] + .show-level,
-.show-art[data-active="image-pulse"] + .show-level,
-.show-art[data-active="particles"] + .show-level{
+.show-art[data-active="image-pulse"] + .show-level{
   position:relative; z-index:3;
   transform:translateY(30vmin);
+}
+/* particles: 电视机不该有 show-pulse 律动, filter 暖光保留 */
+.show-art[data-active="particles"]{
+  animation:none;
+  filter:drop-shadow(0 14px 35px rgba(0,0,0,.6))
+         drop-shadow(0 0 22px rgba(255,140,70,.28));
 }
 
 /* Scene 2: vinyl 旋转 — 持续顺时针, 速度跟 BPM 联动 (CSS var --vinyl-rpm 由 JS 写) */
@@ -454,20 +468,44 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 .scene-image-warp.has-img .scene-hint,
 .scene-image-pulse.has-img .scene-hint-overlay{display:none}
 
-/* Scene 8: particles — canvas 全填充 */
-.scene-particles{background:#08090c;border-radius:14px;overflow:hidden}
+/* Scene 8: particles — 中央粒子屏幕 + 波普复古电视机外壳 */
+.scene-particles{
+  background:transparent;
+  border-radius:0;
+  overflow:visible;
+}
+.particles-screen{
+  position:absolute;
+  left:13.8%; top:22.4%;
+  width:54.2%; height:51.4%;
+  overflow:hidden;
+  border-radius:8% / 12%;
+  background:#050507;
+  box-shadow:
+    inset 0 0 30px #000,
+    inset 0 0 70px #000000d0;
+  z-index:1;
+}
 .particles-canvas{width:100%;height:100%;display:block}
+.particles-tv-shell{
+  position:absolute;
+  inset:-2%;
+  width:104%; height:104%;
+  object-fit:contain;
+  display:block;
+  pointer-events:none;
+  z-index:2;
+}
 .show-art[data-active="particles"] .scene-particles{
   border-radius:0;
-  background:
-    radial-gradient(circle at 50% 45%, #15110b33, transparent 55%),
-    #050507;
-  mix-blend-mode:screen;
+  background:transparent;
+  mix-blend-mode:normal;
 }
 
-/* SCENE 切换按钮 — 永远可见 (PARTY 模式可预选, SHOW 模式生效) */
+/* SCENE / BG / FS 按钮 — 永远可见 (PARTY 模式可预选, SHOW 模式生效) */
 .scene-btn,
-.bg-btn{
+.bg-btn,
+.fs-btn{
   display:inline-flex;align-items:center;
   font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;font-weight:700;
   color:var(--accent);background:transparent;
@@ -476,13 +514,52 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   transition:.15s;min-width:90px;
 }
 .bg-btn{min-width:112px}
+.fs-btn{min-width:60px}
+.fs-btn.is-fs{color:var(--led-on);border-color:var(--led-on);box-shadow:0 0 0 1px var(--led-on)40}
 .scene-btn:hover,
-.bg-btn:hover{color:var(--txt);border-color:var(--accent)}
+.bg-btn:hover,
+.fs-btn:hover{color:var(--txt);border-color:var(--accent)}
 /* INPUT/CONTROL 模式手机端隐藏 (顶栏紧) */
 body.mode-input .scene-btn,
 body.mode-input .bg-btn,
+body.mode-input .fs-btn,
 body.mode-control .scene-btn,
-body.mode-control .bg-btn{display:none}
+body.mode-control .bg-btn,
+body.mode-control .fs-btn{display:none}
+
+/* ============ SHOW 模式: 顶栏自动隐藏 (沉浸式表演) ============
+   2.5s 鼠标不动 → 整个 topbar 淡出
+   鼠标 / 触摸 / 键盘任何活动 → 立即唤回
+   ESC 退出全屏由浏览器原生处理. F 快捷键由 JS 绑 */
+/* topbar 从 grid 流里拽出来变 fixed 浮层 — stage 才能整屏 top:0, 没空带 */
+body.mode-show header.topbar{
+  position:fixed;
+  top:10px; left:10px; right:10px; height:64px;
+  z-index:80;
+  background:transparent;  /* 强制透明, 别给 var(--bar-grad) 漏出来 */
+  border:none;
+  box-shadow:none;
+  transition:opacity .35s ease, transform .35s ease;
+  pointer-events:auto;
+}
+body.mode-show.ui-idle header.topbar{
+  opacity:0;
+  transform:translateY(-130%);  /* 整个滑出顶部 */
+  visibility:hidden;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  pointer-events:none;
+}
+/* 鼠标进入顶栏区域时强制显示, 即使 idle */
+body.mode-show header.topbar:hover{
+  opacity:1 !important;
+  transform:translateY(0) !important;
+  pointer-events:auto !important;
+}
+/* 全屏时把页面背景设黑, 避免某些浏览器留白边 */
+:fullscreen body{ background:#000 }
+:-webkit-full-screen body{ background:#000 }
 @keyframes show-pulse{
   0%, 100% { transform:scale(1); opacity:.92 }
   50%      { transform:scale(1.04); opacity:1 }
@@ -1023,12 +1100,14 @@ main{
 }
 body.hydra-on #hydra-canvas{ display:block }
 
-/* SHOW 模式: hydra 是主秀, 沉到背景层, 不再透明也不混合 */
+/* SHOW 模式: hydra 在 show-bg-layer (z-index:0) 之上, show-stage (z-index:2) 之下
+   用 screen-blend 让 bg 图穿透显示 (黑色像素透明, 亮像素叠加)
+   用户可用 VJ slider 调节 Hydra 在 bg 上的混合强度 */
 body.mode-show.hydra-on #hydra-canvas{
   z-index:1;
-  opacity:1 !important;  /* 覆盖用户 slider — SHOW 模式视觉就该是主体 */
-  mix-blend-mode:normal;
-  background:#0a0b0e;
+  opacity:var(--hydra-opacity, .7);
+  mix-blend-mode:screen;
+  background:transparent;
 }
 body.mode-show.hydra-on #show-stage{ z-index:3 }
 
@@ -1047,6 +1126,10 @@ body.mode-show.hydra-on #show-stage{ z-index:3 }
   isolation:isolate;    /* 让内部 mix-blend 不污染 hydra/UI */
 }
 body.paper-on #paper-overlay{display:block}
+body.mode-show #paper-overlay{
+  z-index:20;
+  isolation:auto;
+}
 
 /* SHOW 模式: paper 在 hydra 主秀之上 + wordmark 显示 */
 body.mode-show.paper-on #paper-overlay .paper-wordmark{display:block}
@@ -1087,6 +1170,14 @@ body.mode-show.paper-on #paper-overlay .paper-wordmark{display:block}
     linear-gradient(to bottom,
       color-mix(in srgb, #1a1612 50%, transparent), transparent 18%, transparent 78%,
       color-mix(in srgb, #1a1612 70%, transparent));
+}
+body.mode-show .paper-vignette{
+  display:block;
+  background:
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, #1a1612 58%, transparent), transparent 34%),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, #1a1612 58%, transparent), transparent 34%),
+    radial-gradient(ellipse at 0% 100%, color-mix(in srgb, #1a1612 72%, transparent), transparent 42%),
+    radial-gradient(ellipse at 100% 100%, color-mix(in srgb, #1a1612 72%, transparent), transparent 42%);
 }
 
 /* wordmark — 大字, italic serif, 跟 amp 联动一根底线
@@ -1147,8 +1238,7 @@ body.hydra-on .hydra-ctl{
   background:var(--surface-deep, #0e0f12);
   cursor:pointer;
 }
-/* SHOW 模式滑块没意义 (强制 opacity:1) — 隐藏 */
-body.mode-show.hydra-on .hydra-ctl{display:none}
+/* SHOW 模式: hydra screen-blend 在 bg-layer 之上, slider 调混合强度 (仍可见) */
 .hydra-ctl-label{
   font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
   color:var(--accent);font-weight:700;

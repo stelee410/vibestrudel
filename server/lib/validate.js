@@ -5,45 +5,41 @@
 import { Parser } from "acorn";
 import { simple as walkSimple } from "acorn-walk";
 
-// === 白名单 ===
+// === 混合模式: top-level 用 whitelist (auto 抽取自 bundle), methods 用 denylist ===
+//
+// Top-level: 用 Strudel bundle 自动抽取的 ~1100 函数名 (server/lib/strudel-whitelist.json,
+//   由 deploy.sh 调 extract-whitelist.mjs 生成). 加上一小撮 JS 内置常用. 不在表里 = 拒绝.
+//   理由: top-level 调用引入 dangerous global (fetch/eval/document/...) 的攻击面更大, 严控.
+// Methods: deny-list 只挡 eval/constructor 等. Pattern.prototype.X 方法太多 (~900 个还在涨),
+//   而且新加方法常用 object literal shorthand 写法 regex 抓不全 — allow-list 会误伤创作.
 
-// 顶级函数 (从 vendor/strudel/index.mjs 提取的全局)
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// 加载 auto 抽取的 whitelist (deploy.sh 跑 extract-whitelist.mjs 时生成)
+let _whitelistData = null;
+try {
+  const json = fs.readFileSync(path.join(__dirname, "strudel-whitelist.json"), "utf8");
+  _whitelistData = JSON.parse(json);
+  console.log(`[validate] loaded whitelist: ${_whitelistData.topLevelCount} top-level, ${_whitelistData.methodsCount} methods (generated ${_whitelistData.generated})`);
+} catch (e) {
+  console.warn(`[validate] strudel-whitelist.json 没找到, 用 minimal fallback. 跑 'node server/lib/extract-whitelist.mjs' 生成. (${e.message})`);
+  _whitelistData = { topLevel: [], methods: [] };
+}
+
 const SAFE_TOPLEVEL = new Set([
-  "stack", "cat", "seq", "s", "n", "note", "sound",
-  "setcpm", "cpm", "silence", "hush", "samples",
-  "arrange", "timeCat", "polymeter", "polyrhythm",
-  "sine", "cosine", "rand", "irand", "perlin",
-  "saw", "square", "tri", "isaw",
+  ..._whitelistData.topLevel,
+  // JS 内置 (LLM 偶尔会用做计算)
+  "Math", "Object", "Array", "JSON", "Number", "String", "Boolean",
+  "parseInt", "parseFloat", "isNaN", "isFinite",
+  "Set", "Map", "Promise", "Date",
 ]);
 
-// Pattern 方法 — 一个比较宽松的常用集合
-// 真要严格,可在 build 时从 vendor/strudel/index.mjs 自动 grep prototype.X
-const SAFE_METHODS = new Set([
-  // 控制 / 时间
-  "fast", "slow", "early", "late", "rev", "iter", "ply", "chop",
-  "every", "sometimes", "often", "rarely", "almostNever", "almostAlways",
-  "struct", "mask", "fix", "loopAt", "loopFirst",
-  "off", "swing", "swingBy", "echo", "stut",
-  // 音色 / 滤波
-  "s", "sound", "n", "note", "scale", "bank",
-  "gain", "velocity", "postgain", "pan",
-  "lpf", "hpf", "bpf", "lpq", "hpq", "lpenv", "lpa", "lpr", "lpd", "lps",
-  "attack", "decay", "sustain", "release", "adsr",
-  "speed", "shape", "distort", "crush", "coarse", "vowel", "phaser",
-  "delay", "delaytime", "delayfb", "delayfeedback",
-  "room", "roomsize", "size", "dry",
-  "chorus", "tremolo",
-  "duck", "orbit",  // sidechain ducking — kick 放 .orbit(N), 其他 voice 用 .duck(N) 引用
-  "mask", "ply", "fix", "tag",  // 编排用
-  // 调式
-  "scale", "rot", "transpose", "add", "sub", "mul", "div", "range",
-  // 视觉
-  "pianoroll", "punchcard", "pitchwheel", "spiral", "wordfall",
-  "scope", "tscope", "fscope", "spectrum",
-  "color", "colour", "draw", "animate", "onPaint",
-  // 杂项
-  "set", "with", "when", "succ", "press", "linger", "compress",
-  "jux", "juxBy", "superimpose", "layer", "stack",
+const DANGEROUS_METHODS = new Set([
+  "eval", "constructor", "__proto__",
 ]);
 
 // 把 acorn 的 Literal/UnaryExpression(-Literal) 都解出真实数字, 别的返回 null
@@ -88,18 +84,18 @@ export function validate(code, ctx = {}) {
     CallExpression(node) {
       const callee = node.callee;
 
-      // 顶级函数调用 (Identifier)
+      // 顶级函数调用 (Identifier) — deny-list 模式, 只挡已知危险
       if (callee.type === "Identifier") {
-        if (!SAFE_TOPLEVEL.has(callee.name)) {
-          errors.push(`unknown top-level function: ${callee.name}() — not in whitelist`);
+        if (DANGEROUS_TOPLEVEL.has(callee.name)) {
+          errors.push(`dangerous global call: ${callee.name}() — not allowed in Strudel code`);
         }
       }
 
-      // 方法调用 (MemberExpression)
+      // 方法调用 (MemberExpression) — 只挡已知危险方法名
       if (callee.type === "MemberExpression" && callee.property.type === "Identifier") {
         const methodName = callee.property.name;
-        if (!SAFE_METHODS.has(methodName)) {
-          errors.push(`unknown method: .${methodName}() — not in whitelist`);
+        if (DANGEROUS_METHODS.has(methodName)) {
+          errors.push(`dangerous method call: .${methodName}() — not allowed`);
         }
 
         // 检查 .gain(N) / .velocity(N) / .postgain(N) 数字常量 (含 -N 等 UnaryExpression)

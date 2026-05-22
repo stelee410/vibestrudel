@@ -16,6 +16,14 @@ Sounds:
   note("<c eb g bb>").s("triangle")  // < > = one per cycle
   n("0 2 4 5").scale("C:minor").s("triangle")   // NOTE: "piano"/"guitar"/etc. NOT available — use synth waveforms
 
+  freq(N).s("sine")          // RAW Hz — use when user names a specific frequency (432, 528, 60, etc.)
+    Examples:
+      freq(432).s("sine").gain(0.4)                       // 432Hz sine drone
+      "440 432 528".freq().s("triangle").gain(0.3)        // pattern of Hz values
+      s("sawtooth").freq(110).lpf(800)                    // raw Hz on a synth voice
+    DO NOT convert "432Hz" to a note name (it's between A4=440 and Ab4=415, no clean note maps).
+    For binaural / healing / pitch experiments / planetary tones / Schumann resonance, ALWAYS use freq() not note().
+
 Layering:
   stack(p1, p2, p3)    // simultaneous
   cat(p1, p2)          // alternate cycles
@@ -257,6 +265,29 @@ Pure looping for 60 cycles is boring. Use these to add MOVEMENT WITHOUT writing 
 
   .struct("1 0 1 1")    — rhythmic gate per beat (1=hit, 0=rest)
     s("hh").struct("1 0 0 1 0 1 0 0")    — non-trivial hat pattern
+
+⚠ SCOPE RULE — CRITICAL — these arrangement ops MUST be on a single voice, NEVER on the outer stack(...)
+  .mask / .every / .sometimes / .rarely / .often / .struct / .fast / .slow / .rev
+  Putting them on the outer stack() = silences/transforms ALL voices simultaneously, including the kick.
+  That causes a full mix dropout, which sounds like a bug to the listener (not a musical break).
+  Even if you want a "drop / breakdown / build" feel, mask individual voices independently — kick MUST keep its pulse
+  unless the user explicitly says "stop / break / drop everything / 全停 / 静音".
+
+  ✗ WRONG — entire mix drops out:
+    stack(
+      s("bd*4").gain(0.9),
+      note("c2 ...").s("sawtooth"),
+      ...
+    ).mask("<1 1 1 1 0 0 1 1>")    // ← kills the kick too
+     .every(8, x => x.fast(2))      // ← speeds up everything including drums
+
+  ✓ RIGHT — kick keeps going, only the chord pad masks out:
+    stack(
+      s("bd*4").gain(0.9),                  // kick: untouched
+      note("c2 ...").s("sawtooth"),         // bass: untouched
+      note("<c3 eb3 g3 bb3>/4").s("sawtooth")
+         .mask("<1 1 1 1 0 0 1 1>")         // ← mask attached to ONE voice only
+    )
 
 GOOD ARRANGEMENT TEMPLATE — bass + drums + lead with variation:
   stack(
@@ -520,7 +551,7 @@ stack(
 )
 
 == RULES ==
-1. Output ONLY a single executable Strudel program in the "code" field — no markdown fences, no top comments.
+1. Output ONLY a single executable Strudel program in the "code" field — NEVER wrap it in \`\`\`js / \`\`\`javascript / \`\`\` fences, NEVER prefix with language tags. The string MUST start directly with \`setcpm(\` or \`stack(\` or \`s(\`, NOT with backticks. Same for "visual" field: pure Hydra code, no fences.
 2. If user mentions BPM, put setcpm(BPM/4) on line 1.
 3. Build INCREMENTALLY on previous code when user says "add/more/也/加/再/增加/还要"; replace fully on "重来/换一个/fresh".
 4. Wrap multiple voices in stack(...).

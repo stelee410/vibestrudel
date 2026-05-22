@@ -66,23 +66,39 @@ export default async function textRoutes(fastify, opts) {
     const continuityPolicy = curState.isEmpty
       ? `== CONTINUITY ==
 This is the FIRST pattern of the session. No music is playing yet. Compose from scratch to fulfill the user's intent.`
-      : `== CONTINUITY POLICY — read this carefully ==
-A live audience is hearing the pattern shown in CURRENT STATE below. Your new code REPLACES it at the next cycle boundary.
-If the new code wildly differs (different BPM, different scale, totally different voices), listeners hear an abrupt cut — bad for jam quality.
+      : `== JAM POLICY — you're a live DJ, improvise on the running track ==
+A live audience is hearing CURRENT STATE; your output REPLACES it at next cycle boundary.
+You have full creative freedom. Three non-negotiable constraints, everything else is up to your musical judgment:
 
-DEFAULT MODE: VARIATION (not full replacement)
-  ✓ Keep BPM identical (unless user explicitly asks for tempo change)
-  ✓ Keep the same scale/key (or close — modal interchange/relative is OK)
-  ✓ Keep at least ONE anchor voice from current code (the kick, the bass, the pad, etc.)
-  ✓ Maintain similar voice count (don't drop from 6 to 2 unless asked for "sparser/simpler")
-  ✓ Add / remove / modify other voices to fulfill the user intent
-  ✓ Visual stays the same (same .pianoroll/.scope etc.) unless user changes visual
+1. BPM LOCKED — never change setcpm value unless the user explicitly names a new BPM number.
 
-EXCEPT explicit fresh-start signals — then you may freely diverge:
-  "重来 / 重新开始 / 全新一段 / 换一种风格 / start over / fresh / new vibe / change genre"
-  (but session BPM lock and STYLE HINT below still override if set)
+2. ENERGY STABLE — preserve the current track's energy level (driving / chill / hype / sparse).
+   This means: don't suddenly drop drums when the room is dancing, don't suddenly turn a techno banger into ambient drone,
+   don't switch from busy 8-voice mix to bare 2-voice. The pulse and arousal level should feel continuous between turns.
 
-When user is vague ("再来点 / 再变一变 / make it interesting"), TREAT IT AS VARIATION.`;
+3. NEVER REPEAT YOURSELF — your draft must NOT be character-identical to CURRENT STATE.
+   If user gave any input (mood, verb, imagery, even nonsense), you owe them an audible change.
+   Same explanation as previous turn = lazy = unacceptable.
+   If the user types "X" and you'd output the exact same code/explanation as for "Y", you're cheating — recompose.
+
+Within those 3 rules, IMPROVISE freely:
+  · User said an incremental verb ("再/加/多/少/换/more/less/add") → tweak that specific thing, leave rest mostly alone.
+  · User gave a mood/imagery/scene word ("机器人在奔跑" / "虚化的世界" / 任何抒情描述) →
+      let the mood guide your choices. Re-color the voices in whatever direction your musical instinct says fits.
+      You decide: maybe swap a waveform, change chord voicing, add an atmospheric layer, shift the bass note pattern,
+      sweep a filter, alter effects. Trust your ear — pick the changes that make the new mood land.
+      Move forward, don't tread water. The track should evolve every turn, even subtly.
+  · User said explicit fresh-start ("重来/换一个/fresh/new vibe/reset") →
+      full replacement (still respecting session BPM lock / style hint / custom rules).
+  · User is vague ("再来点 / make it interesting") →
+      pick something to evolve, surprise yourself; just don't stand still.
+
+== PRE-RETURN CHECK ==
+  Before returning, scan your draft against CURRENT STATE:
+    - Are they substantively different? (some voice changed, some parameter shifted noticeably, some new layer added/removed)
+    - Does the explanation reflect what's actually different and what the mood is (not a generic "kick + hat + bass" boilerplate)?
+    - Could the same code accurately describe a different user input? If yes → fail, you didn't customize.
+  If any answer is "no" → rework before returning. You're a creative partner, not a tape loop.`;
 
     // Session-level 硬约束 (创建时锁的)
     const sessionConstraints = [];
@@ -139,8 +155,19 @@ If the user request conflicts with these rules, the session creator's rules win.
         const usd = estimateCost({ tokensIn, tokensOut });
         await addCost(usd);
 
+        // === BPM enforcement (服务端兜底, 别全靠 LLM 听话) ===
+        // 用户没明确要求改 BPM (没说数字也没说快/慢), 那就把生成代码里的 setcpm 改回 session 期望值
+        let codeAfterCheck = (function enforceBpmIfNeeded(rawCode){
+          const newBpm = extractBpm(rawCode);
+          if (!newBpm || newBpm === bpm) return rawCode;
+          const userRequestedBpm = detectBpmIntent(text);
+          if (userRequestedBpm === "change" || userRequestedBpm === newBpm) return rawCode;
+          // 强制改回
+          console.warn(`[bpm-enforce] LLM 输出 ${newBpm}, 期望 ${bpm}, 用户未要求改, 强制改回`);
+          return rewriteSetcpm(rawCode, bpm);
+        })(code);
         // 校验主代码
-        const v = validate(code, validNames);
+        const v = validate(codeAfterCheck, validNames);
         if (!v.ok) {
           lastError = v.errors.join("; ");
           lastCode = code;
@@ -173,12 +200,12 @@ If the user request conflicts with these rules, the session creator's rules win.
           }
         }
 
-        // 成功 — 把这一轮 user/model 追加到 history 给下次用
+        // 成功 — 把这一轮 user/model 追加到 history 给下次用 (用 codeAfterCheck, 历史里就是已修正的版本)
         await appendHistory(id, "user", text);
-        await appendHistory(id, "model", JSON.stringify({ code, explanation, visual: safeVisual }));
+        await appendHistory(id, "model", JSON.stringify({ code: codeAfterCheck, explanation, visual: safeVisual }));
 
         const next = await updateSession(id, {
-          code,
+          code: codeAfterCheck,
           explanation,
           visual: safeVisual,
           lastBy: sanitizeBy(by),
@@ -187,7 +214,7 @@ If the user request conflicts with these rules, the session creator's rules win.
 
         return {
           seq: next.seq,
-          code,
+          code: codeAfterCheck,
           explanation,
           visual: safeVisual,
           retried,
@@ -208,6 +235,40 @@ function extractBpm(code) {
   if (!m) return null;
   const n = parseFloat(m[1]), d = m[2] ? parseFloat(m[2]) : 1;
   return Math.round((n / d) * 4);
+}
+
+// 解读用户文本: 是否要求改 BPM
+//   返回 数字 = 用户明确给了目标 BPM (例: "加快到 140")
+//   返回 "change" = 用户用了"快/慢/加速/halftime"这种相对词, 没给数字
+//   返回 null = 用户没提任何 BPM 意图 → 服务端可以强制锁回原值
+function detectBpmIntent(text) {
+  if (typeof text !== "string") return null;
+  const t = text.toLowerCase();
+  // 1) 显式数字 + BPM 关键词: "140 bpm" / "bpm=140" / "140拍" / "cpm 140"
+  let m = text.match(/(\d{2,3})\s*(?:bpm|cpm|拍)\b/i) ||
+          text.match(/\b(?:bpm|cpm|tempo|速度|节奏)\s*[:=]?\s*(\d{2,3})\b/i);
+  if (m) {
+    const v = parseInt(m[1], 10);
+    if (v >= 40 && v <= 240) return v;
+  }
+  // 2) 相对快慢关键词
+  const relPattern = /(faster|slower|speed\s*up|slow\s*down|halftime|doubletime|half[\s-]?time|double[\s-]?time|加快|减慢|加速|减速|提速|降速|更快|更慢|快一点|慢一点|halftime|快点|慢点|双倍速|半速)/i;
+  if (relPattern.test(t)) return "change";
+  return null;
+}
+
+// 改写代码里的 setcpm/setcps 为目标 BPM. 找不到就在开头插一行
+function rewriteSetcpm(code, bpm) {
+  const cpmLine = `setcpm(${bpm}/4);`;
+  // 注意: 不要在 \) 后面用 \s* 吃后续空白, 会把代码后续的换行吞掉
+  if (/setcpm\s*\(/.test(code)) {
+    return code.replace(/setcpm\s*\(\s*[\d.]+\s*(?:\/\s*[\d.]+)?\s*\);?/, cpmLine);
+  }
+  if (/setcps\s*\(/.test(code)) {
+    // 顺手把 setcps 也改成 setcpm 统一
+    return code.replace(/setcps\s*\(\s*[\d.]+\s*\);?/, cpmLine);
+  }
+  return cpmLine + "\n" + code;
 }
 
 // 从当前代码里抽取结构骨架, 提供给 LLM 做连续性参考

@@ -194,6 +194,25 @@
     padding:8px 12px;
   }
   .opt-textarea::placeholder{color:#4a525c;font-style:italic}
+  /* AI 优化按钮 — label 行右侧, 点了发请求重写 textarea */
+  .opt-label-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .opt-ai-btn{
+    font-family:var(--font-mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--mint);background:#0a1a14;
+    border:1px solid #2a4537;border-radius:5px;
+    padding:4px 9px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:5px;
+    transition:.15s;
+  }
+  .opt-ai-btn:hover:not(:disabled){background:#13261d;border-color:var(--mint);box-shadow:0 0 8px #7cffb640}
+  .opt-ai-btn:disabled{opacity:.45;cursor:not-allowed}
+  .opt-ai-btn.is-loading{color:#5a6370}
+  .opt-ai-btn.is-loading::before{
+    content:"";width:8px;height:8px;border-radius:50%;
+    background:var(--mint);
+    animation:opt-ai-pulse 1s ease-in-out infinite;
+  }
+  @keyframes opt-ai-pulse{0%,100%{opacity:.3}50%{opacity:1}}
   @media (max-width:600px){
     .create-opts{gap:14px;margin:18px 0 12px}
     .opt-input{width:150px}
@@ -571,7 +590,10 @@
     <!-- 自由文本: 全局设定注入 (调式/和弦/编制/特殊要求, 应用于每一次 AI 生成) -->
     <div class="create-opts" id="create-opts-custom">
       <label class="create-opt create-opt-wide">
-        <span class="opt-label" data-i18n="landing.opt.custom">CUSTOM RULES</span>
+        <div class="opt-label-row">
+          <span class="opt-label" data-i18n="landing.opt.custom">CUSTOM RULES</span>
+          <button type="button" class="opt-ai-btn" id="opt-custom-ai" data-i18n="landing.opt.custom_ai">✨ AI OPTIMIZE</button>
+        </div>
         <textarea class="opt-input opt-textarea" id="opt-custom" rows="2" maxlength="500"
           data-i18n-attr="placeholder:landing.opt.custom_placeholder"
           placeholder="只用 A 多利亚调式 · 只允许打击乐 · 必须有 pad 铺底..."></textarea>
@@ -758,6 +780,62 @@
 
   // 渲染语言切换器
   if (window.I18N) window.I18N.renderSwitcher("#lang-switcher");
+
+  // === CUSTOM RULES 的 AI 优化按钮 ===
+  // 把当前 BPM/风格/草稿发给服务端 /optimize-rules, 回写到 textarea
+  (function setupCustomAi(){
+    const aiBtn   = document.getElementById("opt-custom-ai");
+    const bpmEl   = document.getElementById("opt-bpm");
+    const styleEl = document.getElementById("opt-style");
+    const cusEl   = document.getElementById("opt-custom");
+    if (!aiBtn || !cusEl) return;
+    aiBtn.addEventListener("click", async () => {
+      if (aiBtn.disabled) return;
+      const originalText = aiBtn.textContent;
+      aiBtn.disabled = true;
+      aiBtn.classList.add("is-loading");
+      aiBtn.textContent = "OPTIMIZING";
+      const body = {};
+      const bpmVal = bpmEl && bpmEl.value ? parseInt(bpmEl.value, 10) : null;
+      if (Number.isFinite(bpmVal) && bpmVal >= 40 && bpmVal <= 240) body.bpm = bpmVal;
+      if (styleEl && styleEl.value) body.style = styleEl.value;
+      const draft = (cusEl.value || "").trim();
+      if (draft) body.custom = draft;
+      try {
+        const res = await fetch("/optimize-rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          let msg = "HTTP " + res.status;
+          try { const j = await res.json(); msg = j.reason || j.error || msg; } catch(_){}
+          throw new Error(msg);
+        }
+        const { optimized } = await res.json();
+        if (typeof optimized === "string" && optimized.trim()) {
+          cusEl.value = optimized.trim();
+          cusEl.focus();
+        }
+      } catch (e) {
+        // 出错就 flash 一下按钮 + 提示
+        aiBtn.style.borderColor = "#ff4d6d";
+        aiBtn.style.color = "#ff8aa0";
+        aiBtn.textContent = "ERROR";
+        setTimeout(() => {
+          aiBtn.style.borderColor = "";
+          aiBtn.style.color = "";
+          aiBtn.textContent = originalText;
+        }, 2500);
+        console.warn("[optimize-rules]", e?.message || e);
+        return;
+      } finally {
+        aiBtn.disabled = false;
+        aiBtn.classList.remove("is-loading");
+        if (aiBtn.textContent === "OPTIMIZING") aiBtn.textContent = originalText;
+      }
+    });
+  })();
 
   async function createSession(){
     btn.classList.add("loading");

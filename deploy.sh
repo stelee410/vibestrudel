@@ -54,6 +54,9 @@ if [ "$DO_BUNDLE" = "1" ]; then
 fi
 
 if [ "$DO_SERVER" = "1" ]; then
+  # 重新抽取 Strudel whitelist (校验器要用; 抽自 vendor/strudel/index.mjs)
+  echo "==> extract Strudel whitelist from bundle..."
+  node server/lib/extract-whitelist.mjs vendor/strudel/index.mjs server/lib/strudel-whitelist.json
   echo "==> rsync server/..."
   rsync -az --exclude 'node_modules' --exclude '.dockerignore' server/ "${REMOTE}:${REMOTE_DIR}/server/"
   echo "==> rebuild docker app..."

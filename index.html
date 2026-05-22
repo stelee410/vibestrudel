@@ -86,6 +86,7 @@
       <!-- SHOW 模式 — 中央 SCENE 切换 (speaker / vinyl / radar / wave / bars) -->
       <button class="scene-btn" id="scene-btn" title="SHOW SCENE — 中央图案切换 (click cycles)">SCENE: speaker</button>
       <button class="bg-btn" id="bg-btn" title="SHOW BG — 全屏背景切换 (click cycles)">BG: loading</button>
+      <button class="fs-btn" id="fs-btn" title="Toggle fullscreen (F key)">FULL</button>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -371,11 +372,13 @@
   </div>
 </div>
 
+<!-- ============== SHOW MODE 全屏背景层 — 放在根层 (z-index:0), Hydra 才能 screen-blend 叠在上面 ============== -->
+<div class="show-bg-layer" id="show-bg-layer" aria-hidden="true">
+  <img id="show-bg-img" alt="">
+</div>
+
 <!-- ============== SHOW MODE STAGE — 大喇叭 + 大电平 (只在 mode-show 显示) ============== -->
 <div id="show-stage" aria-hidden="true">
-  <div class="show-bg-layer" id="show-bg-layer">
-    <img id="show-bg-img" alt="">
-  </div>
   <div class="show-art" id="show-art">
     <!-- 自定义图片 (?bg=URL 或 localStorage), 优先级最高 -->
     <img class="show-art-custom" id="show-art-custom" alt="" style="display:none">
@@ -474,7 +477,10 @@
 
     <!-- ========== SCENE 8: particles 粒子云 (canvas, 无须图像) ========== -->
     <div class="show-art-scene scene-particles" data-scene="particles">
-      <canvas id="show-art-particles" class="particles-canvas"></canvas>
+      <div class="particles-screen">
+        <canvas id="show-art-particles" class="particles-canvas"></canvas>
+      </div>
+      <img class="particles-tv-shell" src="/assets/show-overlays/pop-tv-shell.webp" alt="" aria-hidden="true">
     </div>
   </div>
   <div class="show-level">
@@ -1215,6 +1221,18 @@
       const ctx = (typeof window.getAudioContext === "function") ? window.getAudioContext() : null;
       if (ctx && ctx.state !== "running") await ctx.resume();
     } catch(_){}
+    // 强制装 AudioWorklet 模块 — Strudel 的 initAudioOnFirstClick 是异步监听 mousedown,
+    // 跟 PLAY 按钮的 evaluate 形成 race: hap 在 worklet 装完之前触发就报 getTrigger AudioWorkletNode 错.
+    // 显式 await initAudio() 把 worklet 装完再 evaluate, 一次性消掉这个 race.
+    if (typeof window.initAudio === "function"){
+      window.__audioInitPromise = window.__audioInitPromise || window.initAudio();
+      try { await window.__audioInitPromise; }
+      catch (e) {
+        // initAudio 失败不致命 — 旧的 500ms retry 还能兜一次
+        console.warn("[audio] initAudio failed:", e?.message || e);
+        window.__audioInitPromise = null;  // 下次再试
+      }
+    }
     strudelLogJustHandled = false;
     let evalThrew = false;
     let evalError = null;
@@ -1293,6 +1311,61 @@
       meter.dataset.level = String(2 + Math.floor(Math.random()*4));
     }, 220);
   }
+
+  // ============ Fullscreen 切换 + SHOW 模式顶栏自动隐藏 ============
+  (function setupFullscreenAndIdle(){
+    const fsBtn = document.getElementById("fs-btn");
+    const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    async function toggleFs(){
+      try {
+        if (!isFs()) {
+          const el = document.documentElement;
+          if (el.requestFullscreen) await el.requestFullscreen();
+          else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        } else {
+          if (document.exitFullscreen) await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+        }
+      } catch(e){ console.warn("[fs] toggle failed:", e); }
+    }
+    function syncFsButton(){
+      if (!fsBtn) return;
+      const on = isFs();
+      fsBtn.classList.toggle("is-fs", on);
+      fsBtn.textContent = on ? "EXIT" : "FULL";
+    }
+    if (fsBtn) fsBtn.addEventListener("click", toggleFs);
+    document.addEventListener("fullscreenchange", syncFsButton);
+    document.addEventListener("webkitfullscreenchange", syncFsButton);
+    // F 快捷键切全屏 (避开 input/textarea 焦点)
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      const t = e.target;
+      if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
+      if (t && t.isContentEditable) return;
+      e.preventDefault();
+      toggleFs();
+    });
+
+    // === SHOW 模式 idle 自动隐藏顶栏 ===
+    // 只在 mode-show 启用. 任何鼠标/触摸/键盘活动重置 timer.
+    if (!document.body.classList.contains("mode-show")
+        && !document.documentElement.classList.contains("mode-show")) {
+      return;  // 非 SHOW 模式直接跳过 idle 逻辑
+    }
+    const IDLE_MS = 2500;
+    let idleTimer = null;
+    const setIdle = () => document.body.classList.add("ui-idle");
+    const clearIdle = () => {
+      document.body.classList.remove("ui-idle");
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(setIdle, IDLE_MS);
+    };
+    ["mousemove", "touchstart", "keydown", "wheel", "pointerdown"].forEach((ev) => {
+      document.addEventListener(ev, clearIdle, { passive: true });
+    });
+    clearIdle();   // 首次进入 SHOW 启动倒计时
+  })();
 
   // ============ SHOW MODE — 全屏背景 + 大喇叭舞台 + 大电平 ============
   // 背景优先级: ?bg=URL > localStorage("vibestrudel.bgId") > manifest 第一张
@@ -1473,8 +1546,13 @@
     function initParticles(){
       if (!particlesCanvas) return;
       const dpr = window.devicePixelRatio || 1;
-      const w = particlesCanvas.clientWidth || 480;
-      const h = particlesCanvas.clientHeight || 480;
+      const w = particlesCanvas.clientWidth;
+      const h = particlesCanvas.clientHeight;
+      // layout 还没就绪 (scene 还隐藏) — 延迟重试, 别用 480 fallback (会把粒子困在左上角小框)
+      if (w === 0 || h === 0) {
+        setTimeout(initParticles, 200);
+        return;
+      }
       particlesCanvas.width = Math.floor(w * dpr);
       particlesCanvas.height = Math.floor(h * dpr);
       particlesCtx = particlesCanvas.getContext("2d");
@@ -1482,14 +1560,18 @@
       const count = Math.max(120, Math.min(420, Math.floor((w * h) / 7600)));
       particles = [];
       for (let i = 0; i < count; i++){
+        const ang = Math.random() * Math.PI * 2;
+        const sp  = 0.3 + Math.random() * 0.9;
         particles.push({
           x: Math.random() * w,
           y: Math.random() * h,
-          vx: (Math.random() - 0.5) * 0.65,
-          vy: (Math.random() - 0.5) * 0.65,
+          vx: Math.cos(ang) * sp,
+          vy: Math.sin(ang) * sp,
           r: 0.8 + Math.random() * 2.8,
           hue: particleHue + (Math.random() - 0.5) * 72,
           life: Math.random(),
+          // 每粒子独立的流场相位偏移 — 让运动看起来不同步
+          phase: Math.random() * 1000,
         });
       }
     }
@@ -1501,9 +1583,9 @@
       const w = particlesCanvas.clientWidth;
       const h = particlesCanvas.clientHeight;
       const ctx = particlesCtx;
-      // 半透明清屏 → 拖尾效果
+      // 半透明清屏 → 拖尾效果. 用 0.08 让粒子静态时也能持续可见 (太高会快速擦黑)
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "rgba(5, 6, 9, 0.16)";
+      ctx.fillStyle = "rgba(5, 6, 9, 0.08)";
       ctx.fillRect(0, 0, w, h);
       const low = window.__audioLow || 0;
       const mid = window.__audioMid || 0;
@@ -1511,7 +1593,8 @@
       const energy = low * 0.58 + mid * 0.22 + hi * 0.2;
       ctx.globalCompositeOperation = "lighter";
       ctx.lineWidth = 1;
-      ctx.strokeStyle = `hsla(${particleHue}, 78%, ${55 + hi * 25}%, ${Math.min(.24, .05 + energy * .18)})`;
+      // 连线 base 透明度提高, 静态时也能看到星座
+      ctx.strokeStyle = `hsla(${particleHue}, 78%, ${55 + hi * 25}%, ${Math.min(.35, .12 + energy * .22)})`;
       ctx.beginPath();
       for (let i = 0; i < particles.length; i += 3) {
         const a = particles[i];
@@ -1524,22 +1607,42 @@
         }
       }
       ctx.stroke();
+      // 流场时间 — 缓慢演化, 让粒子流向随时间漂移
+      const t = performance.now() * 0.00025;
+      const flowStr = 0.35 + mid * 1.0;
+      const jitterAmt = 0.15 + energy * 0.6;
+      const vmax = 1.2 + low * 3.5 + hi * 1.4;
       for (const p of particles){
-        // kick 时往中心爆开
-        const cx = w / 2, cy = h / 2;
-        const dx = p.x - cx, dy = p.y - cy;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-        const orbit = 0.18 + mid * 0.55;
-        const pushOut = energy * 2.8;
-        p.x += p.vx + (dx / dist) * pushOut + (-dy / dist) * orbit;
-        p.y += p.vy + (dy / dist) * pushOut + (dx / dist) * orbit;
+        // curl-noise 风格流场 — 不同位置不同方向, 时间演化, 创造有机漂移而不是径向爆开
+        const fx = Math.sin(p.y * 0.0085 + t + p.phase * 0.13)
+                 * Math.cos(p.x * 0.0062 + t * 1.3);
+        const fy = Math.cos(p.x * 0.0073 - t * 0.8 + p.phase * 0.11)
+                 * Math.sin(p.y * 0.0054 + t);
+        // 随机抖动 — 真正的随机性, 跟流场叠加
+        const jx = (Math.random() - 0.5) * jitterAmt;
+        const jy = (Math.random() - 0.5) * jitterAmt;
+        // 速度更新: 惯性 + 流场 + 抖动
+        p.vx = p.vx * 0.94 + fx * flowStr * 0.06 + jx * 0.07;
+        p.vy = p.vy * 0.94 + fy * flowStr * 0.06 + jy * 0.07;
+        // bass 击中 → 极小概率给个随机方向脉冲 (不是统一向外, 是混沌)
+        if (low > 0.55 && Math.random() < low * 0.035){
+          const ang = Math.random() * Math.PI * 2;
+          const imp = 1.5 + low * 2.5;
+          p.vx += Math.cos(ang) * imp;
+          p.vy += Math.sin(ang) * imp;
+        }
+        // 速度上限 — 防止脉冲累积成飞射
+        const vmag = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (vmag > vmax){ p.vx *= vmax / vmag; p.vy *= vmax / vmag; }
+        p.x += p.vx;
+        p.y += p.vy;
         // wrap
         if (p.x < 0) p.x = w; else if (p.x > w) p.x = 0;
         if (p.y < 0) p.y = h; else if (p.y > h) p.y = 0;
         p.life += 0.004 + hi * 0.012;
         if (p.life > 1) p.life = 0;
-        // 渲染
-        const alpha = (0.22 + energy * 1.1) * (0.7 + Math.sin(p.life * Math.PI * 2) * 0.3);
+        // 渲染. base alpha 提到 0.55 — 即便音频完全静默, 粒子也持续可见 (旧版 0.22 + 0.16 擦黑导致几秒就褪光)
+        const alpha = (0.55 + energy * 0.8) * (0.7 + Math.sin(p.life * Math.PI * 2) * 0.3);
         const size = p.r * (1 + low * 2.2 + hi * 0.8);
         ctx.fillStyle = `hsla(${p.hue}, 78%, ${54 + hi * 30}%, ${Math.min(1, alpha)})`;
         ctx.beginPath();
