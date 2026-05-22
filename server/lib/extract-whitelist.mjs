@@ -80,6 +80,16 @@ for (const m of txt.matchAll(/\(\s*\{([^}]+?)\}\s*=\s*[a-zA-Z_$][a-zA-Z0-9_$]*\(
 // 4) 解构赋值的别名也算 ({ s: us, sound: as } = c2(["s","n","gain"], "sound"))
 //    上面已经覆盖了 c2 数组里的名字 + "sound" 第二参数. 但解构 LHS 的别名 (s/sound) 已经在 c2 数组里, ok.
 
+// 6.5) evalScope({...}) / xn({...}) 形式 — Strudel 把对象里的所有 key 都写到 globalThis
+//      形态: xn({ setcpm: Gt3, hush: Vt3, cpm: b2, ... })
+//      key 是公开名, value 是 minified 内部 ref. 提取所有 `name: shortRef` 对.
+for (const m of txt.matchAll(/\b(?:xn|evalScope)\(\s*\{([^}]+)\}\s*\)/g)) {
+  for (const pair of m[1].matchAll(/([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g)) {
+    topLevel.add(pair[1]);
+    methods.add(pair[1]);
+  }
+}
+
 // 7) 手工补充 — JS 内置 + Strudel API 里用 object-literal shorthand 定义的方法 (regex 抓不到)
 const manualTopLevel = [
   // JS 数学 / 内置 (LLM 偶尔会用)

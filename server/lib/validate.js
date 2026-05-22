@@ -84,10 +84,10 @@ export function validate(code, ctx = {}) {
     CallExpression(node) {
       const callee = node.callee;
 
-      // 顶级函数调用 (Identifier) — deny-list 模式, 只挡已知危险
+      // 顶级函数调用 (Identifier) — whitelist 模式, 不在表里 = 拒绝
       if (callee.type === "Identifier") {
-        if (DANGEROUS_TOPLEVEL.has(callee.name)) {
-          errors.push(`dangerous global call: ${callee.name}() — not allowed in Strudel code`);
+        if (!SAFE_TOPLEVEL.has(callee.name)) {
+          errors.push(`unknown top-level function: ${callee.name}() — not in Strudel whitelist`);
         }
       }
 
