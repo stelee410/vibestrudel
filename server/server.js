@@ -6,6 +6,8 @@ import codeRoutes from "./routes/code.js";
 import textRoutes from "./routes/text.js";
 import metaRoutes from "./routes/meta.js";
 import optimizeRoutes from "./routes/optimize.js";
+import fxRoutes from "./routes/fx.js";
+import fxBankRoutes from "./routes/fx_bank.js";
 
 import { loadValidNames } from "./lib/samples.js";
 import { redis } from "./lib/redis.js";
@@ -21,7 +23,7 @@ const fastify = Fastify({
 // CORS — 生产环境锁到自己域名
 await fastify.register(cors, {
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : true,
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type", "If-None-Match"],
   exposedHeaders: ["ETag"],
 });
@@ -35,6 +37,8 @@ await fastify.register(codeRoutes, { validNames });
 await fastify.register(textRoutes, { validNames });
 await fastify.register(metaRoutes);
 await fastify.register(optimizeRoutes);
+await fastify.register(fxRoutes);
+await fastify.register(fxBankRoutes);
 
 // 优雅退出
 process.on("SIGINT", () => shutdown());

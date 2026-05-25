@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+# ffmpeg — Phase 2 切片 MiniMax 生成的 60s 音乐到 16 pad 用
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 # 装依赖

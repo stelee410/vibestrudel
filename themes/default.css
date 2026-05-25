@@ -505,7 +505,8 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 /* SCENE / BG / FS 按钮 — 永远可见 (PARTY 模式可预选, SHOW 模式生效) */
 .scene-btn,
 .bg-btn,
-.fs-btn{
+.fs-btn,
+.fx-btn{
   display:inline-flex;align-items:center;
   font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;font-weight:700;
   color:var(--accent);background:transparent;
@@ -513,19 +514,120 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
   padding:6px 10px;cursor:pointer;text-transform:uppercase;
   transition:.15s;min-width:90px;
 }
-.bg-btn{min-width:112px}
+.bg-btn{min-width:142px}
 .fs-btn{min-width:60px}
+.fx-btn{min-width:80px;color:var(--led-ai);border-color:var(--led-ai)}
+.fx-btn.flash{background:var(--led-ai);color:#0a0b0e;box-shadow:0 0 12px var(--led-ai)}
+.fx-btn.is-open{background:var(--led-ai);color:#0a0b0e}
+
+/* === FX RACK 浮窗 (非 modal — 不挡 stage, 表演时可常驻) === */
+.fx-rack{
+  position:fixed; bottom:88px; right:18px;
+  width:380px; max-height:78vh;
+  background:linear-gradient(180deg, #15171b, #0e1014);
+  border:1px solid var(--panel-edge);
+  border-radius:var(--r-panel);
+  box-shadow:0 20px 60px #000c, 0 0 0 1px var(--led-ai)33, inset 0 1px 0 var(--panel-edge-light);
+  display:flex; flex-direction:column;
+  z-index:90;
+  overflow:hidden;
+  font-family:var(--font-mono);
+}
+.fx-rack-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px;
+  background:linear-gradient(180deg, #1c1f25, #13151a);
+  border-bottom:1px solid var(--panel-edge);
+}
+.fx-rack-title{
+  font-size:11px; letter-spacing:.22em; color:var(--led-ai);
+  font-weight:700; text-transform:uppercase;
+}
+.fx-rack-close{
+  background:transparent; border:1px solid var(--panel-edge);
+  color:var(--txt-dim); width:22px; height:22px; border-radius:4px;
+  cursor:pointer; font-size:14px; line-height:1; padding:0;
+}
+.fx-rack-close:hover{ color:var(--txt); border-color:var(--led-err) }
+
+.fx-rack-body{ padding:12px 14px; overflow-y:auto; flex:1 }
+.fx-rack-section{ margin-bottom:16px }
+.fx-rack-section:last-child{ margin-bottom:0 }
+
+.fx-rack-label{
+  display:block; font-size:9px; letter-spacing:.18em; color:var(--led-ai);
+  margin-bottom:6px; text-transform:uppercase; font-weight:700;
+}
+.fx-rack-input{
+  width:100%; padding:8px 10px;
+  background:var(--surface-deep); color:var(--txt);
+  border:1px solid var(--panel-edge); border-radius:var(--r-ctrl);
+  font-family:var(--font-mono); font-size:11px; line-height:1.5;
+  outline:none; resize:vertical; box-sizing:border-box;
+}
+.fx-rack-input:focus{ border-color:var(--led-ai); box-shadow:0 0 0 2px var(--led-ai)33 }
+.fx-rack-input::placeholder{ color:var(--txt-faint); font-style:italic }
+
+.fx-rack-actions{ display:flex; align-items:center; gap:10px; margin-top:8px }
+.fx-rack-btn{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.16em; font-weight:700;
+  color:var(--led-ai); background:transparent;
+  border:1px solid var(--led-ai); border-radius:var(--r-ctrl);
+  padding:7px 12px; cursor:pointer; text-transform:uppercase;
+  transition:.15s;
+}
+.fx-rack-btn:hover:not(:disabled){ background:var(--led-ai); color:#0a0b0e; box-shadow:0 0 10px var(--led-ai)55 }
+.fx-rack-btn:disabled{ opacity:.4; cursor:not-allowed }
+.fx-rack-status{
+  font-size:10px; color:var(--txt-dim); letter-spacing:.05em;
+  flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.fx-rack-status.busy{ color:var(--led-warn) }
+.fx-rack-status.err{ color:var(--led-err) }
+.fx-rack-status.ok{ color:var(--led-on) }
+
+.fx-rack-bank-header{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; gap:8px }
+.fx-rack-bank-name{ font-size:9px; letter-spacing:.18em; color:var(--led-ai); font-weight:700; text-transform:uppercase }
+.fx-rack-bank-hint{ font-size:8px; color:var(--txt-faint); letter-spacing:.08em; text-transform:uppercase; text-align:right }
+
+.fx-rack-grid{
+  display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;
+}
+.fx-pad{
+  aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:linear-gradient(180deg,#161a20,#0c0d10);
+  border:1px solid var(--panel-edge); border-radius:7px;
+  cursor:pointer; transition:.1s ease-out;
+  font-family:var(--font-mono); font-weight:700;
+  color:var(--txt-dim); position:relative; overflow:hidden;
+  user-select:none;
+}
+.fx-pad:hover:not(.empty){ border-color:var(--led-ai); color:var(--led-ai); transform:translateY(-1px) }
+.fx-pad-num{ font-size:14px; letter-spacing:.04em }
+.fx-pad-hint{ font-size:7px; letter-spacing:.1em; color:var(--txt-faint); margin-top:2px }
+.fx-pad.empty{ opacity:.35; cursor:not-allowed }
+.fx-pad.active{
+  background:linear-gradient(180deg, var(--led-ai), #4d7cff);
+  color:#0a0b0e; border-color:var(--led-ai);
+  box-shadow:0 0 18px var(--led-ai)aa;
+  transform:scale(.96);
+}
+.fx-rack-grid-disabled .fx-pad{ opacity:.25 }
+.fx-rack-grid-disabled .fx-pad:hover{ transform:none; border-color:var(--panel-edge); color:var(--txt-dim) }
 .fs-btn.is-fs{color:var(--led-on);border-color:var(--led-on);box-shadow:0 0 0 1px var(--led-on)40}
 .scene-btn:hover,
 .bg-btn:hover,
-.fs-btn:hover{color:var(--txt);border-color:var(--accent)}
+.fs-btn:hover,
+.fx-btn:hover{color:var(--txt);border-color:var(--accent)}
 /* INPUT/CONTROL 模式手机端隐藏 (顶栏紧) */
 body.mode-input .scene-btn,
 body.mode-input .bg-btn,
 body.mode-input .fs-btn,
+body.mode-input .fx-btn,
 body.mode-control .scene-btn,
 body.mode-control .bg-btn,
-body.mode-control .fs-btn{display:none}
+body.mode-control .fs-btn,
+body.mode-control .fx-btn{display:none}
 
 /* ============ SHOW 模式: 顶栏自动隐藏 (沉浸式表演) ============
    2.5s 鼠标不动 → 整个 topbar 淡出

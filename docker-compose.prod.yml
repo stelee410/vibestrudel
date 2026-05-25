@@ -29,6 +29,7 @@ services:
       - SELF_RATE_SECONDS=${SELF_RATE_SECONDS:-5}
       - LLM_MAX_RETRY=${LLM_MAX_RETRY:-1}
       - CORS_ORIGIN=${CORS_ORIGIN:-http://vibe.linkyun.co}
+      - FREESOUND_API_KEY=${FREESOUND_API_KEY}
       - PORT=8080
       - NODE_ENV=production
       - MANIFEST_DIR=/app/manifests
@@ -37,6 +38,8 @@ services:
       - ./vendor/samples/tidal-drum-machines.json:/app/manifests/tidal-drum-machines.json:ro
       - ./vendor/samples/piano.json:/app/manifests/piano.json:ro
       - ./vendor/samples/vcsl.json:/app/manifests/vcsl.json:ro
+      # session pad 库 (Phase 2 MiniMax 切片 / Phase 3 freesound SFX) — caddy 也 mount 同一个目录暴露给客户端
+      - ./data/pads:/app/data/pads
     depends_on:
       - redis
     restart: unless-stopped
@@ -54,6 +57,7 @@ services:
       - ./themes:/srv/public/themes:ro
       - ./vendor:/srv/public/vendor:ro
       - ./assets:/srv/public/assets:ro
+      - ./data/pads:/srv/public/pads:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped

@@ -16,6 +16,17 @@ Sounds:
   note("<c eb g bb>").s("triangle")  // < > = one per cycle
   n("0 2 4 5").scale("C:minor").s("triangle")   // NOTE: "piano"/"guitar"/etc. NOT available — use synth waveforms
 
+== SAMPLE-NAME HALLUCINATION GUARD — common LLM mistakes ==
+These names are NOT loaded — using them = silent (no sound). Use the substitute instead:
+  ✗ musicbox / music-box / celesta / vibraphone / vibes  →  ✓ glockenspiel  (closest metallic tine)
+  ✗ marimba / xylophone                                  →  ✓ kalimba / glockenspiel
+  ✗ piano / epiano / rhodes                              →  ✓ fmpiano  (or piano1 from VCSL)
+  ✗ guitar / acoustic / banjo / sitar                    →  ✓ pluck / harp / folkharp
+  ✗ organ                                                →  ✓ pipeorgan_loud / organ_full (VCSL)
+  ✗ vocal / vox / choir                                  →  ✓ voice
+For "bell-like / chime / 钟琴 / 八音盒" timbre, prefer:
+  glockenspiel, kalimba, handbells, tubularbells, belltree, handchimes  (all VCSL)
+
   freq(N).s("sine")          // RAW Hz — use when user names a specific frequency (432, 528, 60, etc.)
     Examples:
       freq(432).s("sine").gain(0.4)                       // 432Hz sine drone
@@ -537,6 +548,48 @@ USE VARIATION — static loops feel boring. Sprinkle these in:
   .iter(4)
   .ply("<1 2 3>")
   .pan(sine.range(0.3, 0.7).slow(8))
+
+== MELODY / BASS PATTERN LIBRARY — pick + adapt when you don't have a strong idea ==
+When inspiration is thin OR when default 三和弦轮播 (c4 eb4 g4 bb4 cycling) feels too basic, pick a pattern from below
+that fits the vibe, then TRANSPOSE the scale/key to match current code (replace "C:" with current key) and adjust .gain/.lpf to mix.
+DO NOT just copy verbatim — adapt notes to current scale, tweak rhythm to current BPM, pick effects that fit the mood.
+
+--- BASSLINES ---
+[techno rolling sub]      note("<c2 c2 eb2 [c2 c2]>*2").s("sawtooth").lpf(sine.range(300, 800).slow(8)).lpq(10).attack(0.005).release(0.18).gain(0.78).duck(2)
+[acid 303]                note("c2 c2*2 eb2 c2 g2 c2 [bb1 eb2] c2").s("sawtooth").lpf(sine.range(200, 2200).slow(4)).lpq(15).distort(0.4).attack(0.005).release(0.15).gain(0.75).duck(2)
+[house walking]           note("<c2 g1 eb2 g2 f2 eb2 d2 c2>*2").s("triangle").lpf(700).attack(0.01).release(0.3).gain(0.65).swing(0.04).duck(2)
+[dnb reese, halftime]     note("c1 [~ c1] eb1 ~ ~ g1 [~ bb1] c1").s("sawtooth").lpf(sine.range(150, 600).slow(2)).lpq(8).distort(0.55).attack(0.005).release(0.4).gain(0.8).duck(2)
+[deep sub pulse]          note("c1 ~ ~ c1 ~ ~ eb1 ~").s("sine").attack(0.05).release(0.6).gain(0.85).duck(2)
+[detroit funk bass]       note("<[c2 ~ eb2 ~] [~ g1 ~ bb1] [c2 c2 ~ eb2] [g1 ~ f1 ~]>*2").s("sawtooth").lpf(450).lpq(8).attack(0.005).release(0.22).gain(0.72).duck(2)
+
+--- LEAD MELODIES (transpose scale key) ---
+[phrygian dark motif]     n("<0 1 3 5 7 5 3 1>").scale("C:phrygian").s("triangle").lpf(1400).attack(0.02).release(0.3).gain(0.45).delay(0.4).delaytime(0.375).delayfb(0.4)
+[dorian groove arp]       n("<[0 2 4 6] [5 7 9 11] [3 5 7 9] [4 6 8 10]>").scale("C:dorian").s("triangle").lpf(2000).attack(0.02).release(0.5).gain(0.4).delay(0.3).delaytime(0.375).delayfb(0.4)
+[minor pentatonic]        n("<0 2 4 7 9 7 4 2>").scale("C:minorPentatonic").s("triangle").lpf(1800).attack(0.04).release(0.5).gain(0.42).room(0.3)
+[whole-tone eerie]        note("<c4 d4 e4 [f#4 g#4] [a#4 c5]>").s("sine").lpf(2500).attack(0.05).release(0.6).gain(0.4).room(0.5).delay(0.4).delaytime(0.5).delayfb(0.5)
+[blues licks lofi]        n("<0 2 3 5 7 [5 7] 3 [2 0]>").scale("C:blues").s("triangle").lpf(1400).attack(0.05).release(0.4).gain(0.4).room(0.4).swing(0.05)
+[harmonic minor exotic]   n("<0 2 4 6 7 [6 4] 2 0>").scale("C:harmonicMinor").s("triangle").lpf(1800).attack(0.02).release(0.4).gain(0.42).delay(0.4).delaytime(0.375).delayfb(0.4)
+[detroit call+response]   note("<[c4 eb4 g4 ~] [~ g4 eb4 c4] [c4 g4 bb4 eb5] [g4 bb4 g4 eb4]>").s("sawtooth").lpf(2400).lpq(3).attack(0.01).release(0.4).gain(0.4).delay(0.3).delaytime(0.375).delayfb(0.45)
+[cinematic octave jump]   note("<c4 [g4 c5] eb4 [bb4 eb5] ab4 [eb5 ab5] g4 [d5 g5]>").s("triangle").lpf(2000).attack(0.1).release(0.8).gain(0.4).room(0.7).delay(0.5).delaytime(0.5).delayfb(0.6)
+[berlin minimal pluck]    note("~ c4 ~ ~ eb4 ~ g4 ~ ~ ~ bb4 ~ ~ c5 ~ ~").s("triangle").attack(0.005).release(0.15).gain(0.4).delay(0.4).delaytime(0.1875).delayfb(0.45).room(0.3)
+[mixolydian groove]       n("<[0 4 7] [2 5 9] [4 7 11] [0 4 7]>").scale("C:mixolydian").s("sawtooth").lpf(2200).attack(0.02).release(0.35).gain(0.38).delay(0.3).delaytime(0.375)
+[lydian dreamy]           n("<0 4 7 11 [9 11 14] [7 11] 4 [0 2]>").scale("C:lydian").s("triangle").lpf(2400).attack(0.06).release(0.6).gain(0.4).room(0.55).delay(0.4).delaytime(0.5).delayfb(0.45)
+
+--- CHORD PROGRESSIONS (real stacks, not single notes) ---
+[modal interchange minor] note("<[c3,eb3,g3,bb3] [ab2,c3,eb3,g3] [bb2,d3,f3,ab3] [eb3,g3,bb3,d4]>/4").s("sawtooth").lpf(800).attack(1.2).release(2.8).gain(0.3).room(0.7).duck(2)
+[ii-V-I jazz lofi]        note("<[d3,f3,a3,c4] [g2,b2,d3,f3] [c3,e3,g3,b3] [a2,c3,e3,g3]>/4").s("sawtooth").lpf(1200).attack(0.5).release(2).gain(0.32).room(0.4).duck(2)
+[suspended drift]         note("<[c3,f3,g3] [c3,eb3,g3,bb3] [bb2,eb3,f3] [c3,f3,g3,bb3]>/4").s("sawtooth").lpf(900).attack(2).release(3).gain(0.3).room(0.75).duck(2)
+[house 7th vamp]          note("<[c3,eb3,g3,bb3] [f3,ab3,c4,eb4]>/2").s("sawtooth").lpf(1400).attack(0.6).release(1.5).gain(0.32).room(0.4).delay(0.3).delaytime(0.375).duck(2)
+[neo-soul rhodes feel]    note("<[d3,f3,a3,c4,e4] [g2,b2,d3,f3,a3] [c3,e3,g3,b3,d4] [f2,a2,c3,e3,g3]>/4").s("sawtooth").lpf(1100).attack(0.4).release(1.8).gain(0.28).room(0.55).duck(2)
+
+--- PADS / ATMOSPHERIC LAYERS ---
+[ambient drone slow]      note("<[c3,eb3,g3,bb3] [g2,bb2,d3,f3]>/8").s("sawtooth").lpf(sine.range(400, 900).slow(16)).attack(3).release(6).gain(0.32).room(0.85).delay(0.6).delaytime(0.75).delayfb(0.5)
+[sub drone bed]           note("c1").s("sine").gain(0.2).attack(2).release(4).lpf(120)
+[shimmer high pad]        note("<[c5,g5,c6] [eb5,g5,bb5] [g4,c5,eb5] [bb4,eb5,g5]>/8").s("triangle").lpf(3500).attack(1.5).release(4).gain(0.18).room(0.9).delay(0.7).delaytime(0.5).delayfb(0.55)
+[noise wash texture]      s("white").gain(0.08).lpf(1200).hpf(400).room(0.7).delay(0.5).delaytime(0.375).delayfb(0.5)
+
+USAGE NOTE: when current code has scale("X:Y"), reuse the same key X — e.g. swap "C:phrygian" → "F:phrygian" if track is in F.
+NEVER use a default placeholder pattern when the library has a better fit for the mood. Pick BOLDLY.
 
 == REFERENCE EXAMPLE — a properly rich 128 BPM techno jam ==
 setcpm(128/4)

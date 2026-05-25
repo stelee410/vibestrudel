@@ -81,15 +81,31 @@ You have full creative freedom. Three non-negotiable constraints, everything els
    Same explanation as previous turn = lazy = unacceptable.
    If the user types "X" and you'd output the exact same code/explanation as for "Y", you're cheating — recompose.
 
-Within those 3 rules, IMPROVISE freely:
+Within those 3 rules, IMPROVISE freely. **Scale your boldness to the richness of the input:**
+
   · User said an incremental verb ("再/加/多/少/换/more/less/add") → tweak that specific thing, leave rest mostly alone.
-  · User gave a mood/imagery/scene word ("机器人在奔跑" / "虚化的世界" / 任何抒情描述) →
-      let the mood guide your choices. Re-color the voices in whatever direction your musical instinct says fits.
-      You decide: maybe swap a waveform, change chord voicing, add an atmospheric layer, shift the bass note pattern,
-      sweep a filter, alter effects. Trust your ear — pick the changes that make the new mood land.
-      Move forward, don't tread water. The track should evolve every turn, even subtly.
+
+  Boldness scales with input richness — judge by SEMANTIC DENSITY, not length:
+    LIGHT input = single descriptor (one adjective / one noun / one sensation, no narrative)
+        → subtle but audible shift in that direction. Swap a waveform, sweep a filter, adjust effects. Tasteful.
+    RICH input = anything with multiple semantic components composed into a scene/image:
+        signals of richness — has (subject + action) OR (subject + setting) OR (object + emotion/atmosphere) OR sensory details (light, sound, smell, motion) OR temporal/spatial framing OR figurative language;
+        anything that paints a mental image or implies a story is RICH regardless of length —
+        a 4-character 中文 phrase can be rich; a 20-word literal instruction may not be.
+      → THIS IS WHERE YOU EARN YOUR KEEP. Don't play it safe with a small filter tweak.
+        ✓ Make bold, unexpected creative choices that bring the scene to life
+        ✓ Reach for unusual instrument banks (VCSL strings, world percussion, obscure synths — break away from default TR909)
+        ✓ Add a STORYTELLING layer — a melodic motif, a counter-rhythm, a texture that EMBODIES the imagery
+        ✓ Try a key/scale shift if it serves the scene (mixolydian / phrygian / harmonic minor / pentatonic / whole-tone)
+        ✓ Use space dynamically — extreme room/delay for vast scenes, dry close-mic for intimate
+        ✓ Multiple voices change — recompose bass shape, swap chord palette, add a new lead element
+        ✓ Still respect BPM + energy + drum core; everything else should clearly say "the AI heard the story and ran with it"
+        Surprise them. Inspire them. Make them go "oh damn the AI actually got it".
+    The boundary between LIGHT and RICH is a judgment call — when in doubt, lean RICH. Conservative-but-bland is the worse failure mode.
+
   · User said explicit fresh-start ("重来/换一个/fresh/new vibe/reset") →
       full replacement (still respecting session BPM lock / style hint / custom rules).
+
   · User is vague ("再来点 / make it interesting") →
       pick something to evolve, surprise yourself; just don't stand still.
 
@@ -166,6 +182,8 @@ If the user request conflicts with these rules, the session creator's rules win.
           console.warn(`[bpm-enforce] LLM 输出 ${newBpm}, 期望 ${bpm}, 用户未要求改, 强制改回`);
           return rewriteSetcpm(rawCode, bpm);
         })(code);
+        // LLM 常幻觉一些不存在的 sample 名 → 映射到真实音色 (静默 404 vs 真出声)
+        codeAfterCheck = aliasMissingSamples(codeAfterCheck);
         // 校验主代码
         const v = validate(codeAfterCheck, validNames);
         if (!v.ok) {
@@ -255,6 +273,64 @@ function detectBpmIntent(text) {
   const relPattern = /(faster|slower|speed\s*up|slow\s*down|halftime|doubletime|half[\s-]?time|double[\s-]?time|加快|减慢|加速|减速|提速|降速|更快|更慢|快一点|慢一点|halftime|快点|慢点|双倍速|半速)/i;
   if (relPattern.test(t)) return "change";
   return null;
+}
+
+// LLM 经常 "脑补" 不存在的音色名 (musicbox / celesta / sitar / piano / guitar...).
+// 这里做一次字符串级别名映射, 把它们替换成最接近的真实加载 sample.
+// 不在这里 import samples manifest — 维护一份手列清单, 添加便宜.
+//
+// 注意只匹配 s("...") / .s("...") / sound("...") 字符串内的 token, 避免误伤别处 (变量名/注释).
+const SAMPLE_ALIASES = {
+  // 八音盒 / 钢片琴 / 天使竖琴等 → glockenspiel (最接近的小金属片音色)
+  musicbox:     "glockenspiel",
+  "music-box":  "glockenspiel",
+  music_box:    "glockenspiel",
+  celesta:      "glockenspiel",
+  vibraphone:   "glockenspiel",   // VCSL 里没有, 用 glock 代
+  vibes:        "glockenspiel",
+  marimba:      "kalimba",        // VCSL 没 marimba (有 timpani 但太低), kalimba 是最近替代
+  xylophone:    "glockenspiel",
+  // 弦 / 拨弦
+  sitar:        "harp",
+  banjo:        "folkharp",
+  ukulele:      "pluck",
+  acoustic:     "pluck",
+  guitar:       "pluck",          // dirt 有 pluck, 没有 guitar (除非 bank)
+  // 钢琴族 (Strudel 默认没钢琴, fmpiano 是合成)
+  piano:        "fmpiano",
+  rhodes:       "fmpiano",
+  epiano:       "fmpiano",
+  // 风琴
+  organ:        "hoover",         // 退而求其次, 至少有持续 pad 感
+  // 人声
+  vocal:        "voice",
+  vox:          "voice",
+  choir:        "voice",
+};
+
+function aliasMissingSamples(code) {
+  if (typeof code !== "string" || !code) return code;
+  // 匹配 s("...") / .s("...") / sound("...") / s('...') 三种形式
+  return code.replace(/(\b(?:s|sound)\s*\(\s*)(["'])([^"']+)\2/g, (full, prefix, quote, content) => {
+    // content 是一个 mini-notation, 可能多 token: "musicbox kalimba bell"
+    const tokens = content.split(/\s+/);
+    let changed = false;
+    const rewritten = tokens.map(tok => {
+      // token 可能形如 "musicbox" 或 "musicbox:3" 或 "musicbox*4" — 拆出纯名字
+      const m = tok.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)(.*)$/);
+      if (!m) return tok;
+      const [, name, suffix] = m;
+      const lower = name.toLowerCase();
+      const alias = SAMPLE_ALIASES[lower];
+      if (alias) {
+        changed = true;
+        return alias + suffix;
+      }
+      return tok;
+    });
+    if (changed) console.warn(`[sample-alias] "${content}" → "${rewritten.join(" ")}"`);
+    return prefix + quote + rewritten.join(" ") + quote;
+  });
 }
 
 // 改写代码里的 setcpm/setcps 为目标 BPM. 找不到就在开头插一行

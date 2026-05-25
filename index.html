@@ -87,6 +87,7 @@
       <button class="scene-btn" id="scene-btn" title="SHOW SCENE — 中央图案切换 (click cycles)">SCENE: speaker</button>
       <button class="bg-btn" id="bg-btn" title="SHOW BG — 全屏背景切换 (click cycles)">BG: loading</button>
       <button class="fs-btn" id="fs-btn" title="Toggle fullscreen (F key)">FULL</button>
+      <button class="fx-btn" id="fx-rack-btn" title="FX RACK — 16-pad sample bank (generate + trigger)">FX RACK</button>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -368,6 +369,51 @@
           <button class="share-copy" data-target="share-url-control" data-i18n="share.copy">COPY</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== FX RACK 浮窗 — 16-pad sample bank (Phase 2 MiniMax 切片 + Phase 3 freesound SFX) ============== -->
+<div class="fx-rack" id="fx-rack" style="display:none" aria-hidden="true">
+  <div class="fx-rack-head">
+    <span class="fx-rack-title">FX RACK</span>
+    <button class="fx-rack-close" id="fx-rack-close" title="关闭">×</button>
+  </div>
+  <div class="fx-rack-body">
+    <div class="fx-rack-section">
+      <label class="fx-rack-label">MUSIC PROMPT</label>
+      <textarea class="fx-rack-input" id="fx-rack-prompt" rows="2" maxlength="400"
+        placeholder="128 BPM minimal techno in C minor, kick + hat + sub bass"></textarea>
+      <div class="fx-rack-actions">
+        <button class="fx-rack-btn fx-rack-gen" id="fx-rack-gen-music">✨ GENERATE MUSIC</button>
+        <span class="fx-rack-status" id="fx-rack-status"></span>
+      </div>
+    </div>
+
+    <div class="fx-rack-section">
+      <div class="fx-rack-bank-header">
+        <span class="fx-rack-bank-name">MUSIC BANK (16-PAD SLICES)</span>
+        <span class="fx-rack-bank-hint">click pad → broadcast to all session clients</span>
+      </div>
+      <div class="fx-rack-grid" id="fx-rack-grid-music"></div>
+    </div>
+
+    <div class="fx-rack-section">
+      <label class="fx-rack-label">SFX MOOD</label>
+      <textarea class="fx-rack-input" id="fx-rack-sfx-mood" rows="2" maxlength="200"
+        placeholder="industrial cyberpunk · 末日工厂 · 数据故障 · ..."></textarea>
+      <div class="fx-rack-actions">
+        <button class="fx-rack-btn fx-rack-gen" id="fx-rack-gen-sfx">✨ GENERATE SFX</button>
+        <span class="fx-rack-status" id="fx-rack-sfx-status"></span>
+      </div>
+    </div>
+
+    <div class="fx-rack-section">
+      <div class="fx-rack-bank-header">
+        <span class="fx-rack-bank-name">SFX BANK (freesound CC0)</span>
+        <span class="fx-rack-bank-hint">click pad → broadcast to all clients</span>
+      </div>
+      <div class="fx-rack-grid" id="fx-rack-grid-sfx"></div>
     </div>
   </div>
 </div>
@@ -1367,6 +1413,280 @@
     clearIdle();   // 首次进入 SHOW 启动倒计时
   })();
 
+  // ============ FX BROADCAST (Phase 1) ============
+  // 任何 session 客户端 POST /s/:id/fx → Redis pub/sub → SSE → 所有 session 客户端收到
+  // 每个客户端把 sample 排到自己 Strudel 时钟的下一个 quantize 边界播 (8th/quarter/bar)
+  // 跨客户端不严格 sample-accurate (各自时钟独立), 但都 snap 到拍上, 听感够.
+  (function setupFxBus(){
+    if (!PARTY_MODE || !SESSION_ID) return;
+
+    const fxRackBtn = document.getElementById("fx-rack-btn");
+    const fxBufferCache = new Map();   // sample name → AudioBuffer
+    const STALE_MS = 2000;
+
+    // sample 名 → URL 解析:
+    //   "music_N"  → /pads/{sid}/music/{N}.mp3        (Phase 2 MiniMax 切片)
+    //   "sfx_N"    → /pads/{sid}/sfx/{N}.mp3          (Phase 3 freesound)
+    //   其他      → /assets/fx/{name}.wav            (默认 / 静态测试 sample)
+    function resolveFxUrl(name) {
+      const m = name.match(/^(music|sfx)_(\d+)$/);
+      if (m) return `/pads/${SESSION_ID}/${m[1]}/${m[2]}.mp3`;
+      return `/assets/fx/${name}.wav`;
+    }
+
+    async function loadFxSample(name){
+      if (fxBufferCache.has(name)) return fxBufferCache.get(name);
+      const ctx = window.getAudioContext?.();
+      if (!ctx) throw new Error("audio context not ready");
+      const res = await fetch(resolveFxUrl(name));
+      if (!res.ok) throw new Error(`sample ${name} fetch ${res.status}`);
+      const ab = await res.arrayBuffer();
+      const buf = await ctx.decodeAudioData(ab);
+      fxBufferCache.set(name, buf);
+      return buf;
+    }
+
+    function nextQuantizeTime(quantize){
+      const ctx = window.getAudioContext();
+      const now = ctx.currentTime;
+      const bpm = state.bpm || 120;
+      const beatDur = 60 / bpm;
+      let unit;
+      switch (quantize) {
+        case "now":          return now + 0.020;
+        case "next_8th":     unit = beatDur / 2; break;
+        case "next_quarter": unit = beatDur; break;
+        case "next_half":    unit = beatDur * 2; break;
+        case "next_bar":     unit = beatDur * 4; break;
+        default:             unit = beatDur / 2;
+      }
+      const nextBoundary = Math.ceil(now / unit) * unit;
+      // 边界离 now <10ms → 推到下一个, 防 audio engine 错过
+      return (nextBoundary - now < 0.010) ? nextBoundary + unit : nextBoundary;
+    }
+
+    async function playFxAt(name, when, gain = 0.8){
+      try {
+        const ctx = window.getAudioContext();
+        if (ctx.state !== "running") await ctx.resume();
+        const buf = await loadFxSample(name);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const g = ctx.createGain();
+        g.gain.value = gain;
+        src.connect(g);
+        // ctx.destination 已经被 setupMasterLimiterOnce hook 过 → 自动经 master limiter
+        g.connect(ctx.destination);
+        src.start(when);
+      } catch (e) {
+        console.warn("[fx] play error:", e?.message || e);
+      }
+    }
+
+    // === SSE 订阅 ===
+    let es = null;
+    let reconnectTimer = null;
+    function connect(){
+      try {
+        es = new EventSource(`/s/${SESSION_ID}/fx/stream`);
+        es.addEventListener("message", (e) => {
+          let evt;
+          try { evt = JSON.parse(e.data); } catch { return; }
+          if (!evt || !evt.sample) return;
+          // 重连后回灌的旧事件丢弃
+          if (evt.sentAt && Date.now() - evt.sentAt > STALE_MS) {
+            console.warn("[fx] stale event dropped:", evt.sample);
+            return;
+          }
+          const when = nextQuantizeTime(evt.quantize || "next_8th");
+          playFxAt(evt.sample, when, typeof evt.gain === "number" ? evt.gain : 0.8);
+          // UI flash: 顶栏按钮 + 对应 pad
+          if (fxRackBtn) {
+            fxRackBtn.classList.add("flash");
+            setTimeout(() => fxRackBtn.classList.remove("flash"), 180);
+          }
+          const padEl = document.querySelector(`.fx-pad[data-sample="${evt.sample}"]`);
+          if (padEl) {
+            padEl.classList.add("active");
+            setTimeout(() => padEl.classList.remove("active"), 200);
+          }
+        });
+        es.addEventListener("error", () => {
+          // 浏览器内置 retry, 但 readyState=CLOSED 时需要手动重建
+          if (es && es.readyState === EventSource.CLOSED) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, 2000);
+          }
+        });
+      } catch (e) {
+        console.warn("[fx] SSE setup error:", e?.message || e);
+      }
+    }
+    connect();
+
+    // === 通用 fx trigger (任何客户端按 pad 都走这里) ===
+    async function triggerFx(sample, quantize = "next_8th") {
+      try {
+        unlockAudioNow();   // 用户手势上下文里 unlock audio context
+        const res = await fetch(`/s/${SESSION_ID}/fx`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sample, quantize }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          log("err", `FX trigger fail: ${j.error || res.status}`);
+        }
+      } catch (e) {
+        log("err", "FX trigger: " + e.message);
+      }
+    }
+
+    // === FX RACK 面板 ===
+    const rack         = document.getElementById("fx-rack");
+    const rackCloseBtn = document.getElementById("fx-rack-close");
+    const rackGenBtn   = document.getElementById("fx-rack-gen-music");
+    const rackPrompt   = document.getElementById("fx-rack-prompt");
+    const rackStatus   = document.getElementById("fx-rack-status");
+    const rackGridMus  = document.getElementById("fx-rack-grid-music");
+    const rackGridSfx  = document.getElementById("fx-rack-grid-sfx");
+
+    function setRackStatus(msg, kind = "") {
+      if (!rackStatus) return;
+      rackStatus.textContent = msg || "";
+      rackStatus.classList.remove("busy", "err", "ok");
+      if (kind) rackStatus.classList.add(kind);
+    }
+
+    function renderPadGrid(gridEl, type, pads) {
+      if (!gridEl) return;
+      gridEl.innerHTML = "";
+      for (let i = 0; i < 16; i++) {
+        const pad = pads.find(p => p.index === i);
+        const div = document.createElement("button");
+        div.className = "fx-pad" + (pad ? "" : " empty");
+        div.dataset.sample = `${type}_${i}`;
+        div.innerHTML = `<span class="fx-pad-num">${String(i + 1).padStart(2, "0")}</span><span class="fx-pad-hint">${type.toUpperCase()}</span>`;
+        if (pad) {
+          div.addEventListener("click", () => triggerFx(`${type}_${i}`, "next_8th"));
+        }
+        gridEl.appendChild(div);
+      }
+    }
+
+    async function refreshBank() {
+      try {
+        const res = await fetch(`/s/${SESSION_ID}/fx-bank`);
+        if (!res.ok) return;
+        const data = await res.json();
+        renderPadGrid(rackGridMus, "music", data.music || []);
+        renderPadGrid(rackGridSfx, "sfx", data.sfx || []);
+      } catch (e) {
+        console.warn("[fx-rack] refreshBank:", e.message);
+      }
+    }
+
+    // 初始空 pad 网格
+    renderPadGrid(rackGridMus, "music", []);
+    renderPadGrid(rackGridSfx, "sfx", []);
+
+    if (fxRackBtn) {
+      fxRackBtn.addEventListener("click", async () => {
+        const open = rack.style.display !== "none";
+        if (open) {
+          rack.style.display = "none";
+          fxRackBtn.classList.remove("is-open");
+        } else {
+          rack.style.display = "flex";
+          fxRackBtn.classList.add("is-open");
+          await refreshBank();
+        }
+      });
+    }
+    if (rackCloseBtn) {
+      rackCloseBtn.addEventListener("click", () => {
+        rack.style.display = "none";
+        fxRackBtn?.classList.remove("is-open");
+      });
+    }
+
+    if (rackGenBtn) {
+      rackGenBtn.addEventListener("click", async () => {
+        const prompt = (rackPrompt.value || "").trim();
+        if (!prompt) {
+          setRackStatus("prompt 不能为空", "err");
+          return;
+        }
+        rackGenBtn.disabled = true;
+        setRackStatus("generating... (~30-60s)", "busy");
+        const t0 = Date.now();
+        try {
+          const res = await fetch(`/s/${SESSION_ID}/fx-bank/music`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            const msg = data.error === "fx_bank_cooldown"
+              ? `cooldown ${data.remainingSec}s`
+              : (data.details || data.error || "gen failed");
+            throw new Error(msg);
+          }
+          const dt = ((Date.now() - t0) / 1000).toFixed(1);
+          setRackStatus(`✓ ${data.pads.length} pads ready (${dt}s, ${data.sliceMs}ms/pad)`, "ok");
+          renderPadGrid(rackGridMus, "music", data.pads);
+        } catch (e) {
+          setRackStatus("✗ " + e.message, "err");
+        } finally {
+          rackGenBtn.disabled = false;
+        }
+      });
+    }
+
+    // === SFX GENERATE ===
+    const rackGenSfxBtn  = document.getElementById("fx-rack-gen-sfx");
+    const rackSfxMood    = document.getElementById("fx-rack-sfx-mood");
+    const rackSfxStatus  = document.getElementById("fx-rack-sfx-status");
+    function setSfxStatus(msg, kind = "") {
+      if (!rackSfxStatus) return;
+      rackSfxStatus.textContent = msg || "";
+      rackSfxStatus.classList.remove("busy", "err", "ok");
+      if (kind) rackSfxStatus.classList.add(kind);
+    }
+    if (rackGenSfxBtn) {
+      rackGenSfxBtn.addEventListener("click", async () => {
+        const mood = (rackSfxMood.value || "").trim();
+        rackGenSfxBtn.disabled = true;
+        setSfxStatus("searching freesound + downloading 16 sfx... (~10-30s)", "busy");
+        const t0 = Date.now();
+        try {
+          const res = await fetch(`/s/${SESSION_ID}/fx-bank/sfx`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mood }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            const msg = data.error === "fx_bank_cooldown"
+              ? `cooldown ${data.remainingSec}s`
+              : (data.details || data.error || "gen failed");
+            throw new Error(msg);
+          }
+          const dt = ((Date.now() - t0) / 1000).toFixed(1);
+          setSfxStatus(`✓ ${data.succeeded}/${(data.succeeded || 0) + (data.failed || 0)} pads ready (${dt}s)`, "ok");
+          renderPadGrid(rackGridSfx, "sfx", data.pads);
+        } catch (e) {
+          setSfxStatus("✗ " + e.message, "err");
+        } finally {
+          rackGenSfxBtn.disabled = false;
+        }
+      });
+    }
+
+    window.__fxBus = { reconnect: connect, cache: fxBufferCache, trigger: triggerFx, refreshBank };
+  })();
+
   // ============ SHOW MODE — 全屏背景 + 大喇叭舞台 + 大电平 ============
   // 背景优先级: ?bg=URL > localStorage("vibestrudel.bgId") > manifest 第一张
   (function setupShowStage(){
@@ -1452,7 +1772,7 @@
 
     function shortBgLabel(title){
       const value = title || "custom";
-      return value.length > 14 ? value.slice(0, 13) + "..." : value;
+      return value.length > 18 ? value.slice(0, 17) + "..." : value;
     }
     function hueFromHex(hex){
       if (!/^#[0-9a-f]{6}$/i.test(hex || "")) return 42;

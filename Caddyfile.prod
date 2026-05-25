@@ -17,9 +17,32 @@
         reverse_proxy app:8080
     }
 
-    @session_action path_regexp ^/s/[a-zA-Z0-9_-]+/(code|text)$
+    @session_action path_regexp ^/s/[a-zA-Z0-9_-]+/(code|text|fx)$
     handle @session_action {
         reverse_proxy app:8080
+    }
+
+    # fx-bank 路由 — 生成 + 列 pad 库 (转后端)
+    @fx_bank path_regexp ^/s/[a-zA-Z0-9_-]+/fx-bank(/[a-z]+)?$
+    handle @fx_bank {
+        reverse_proxy app:8080
+    }
+
+    # pad 静态文件 — 服务端切好的 mp3 直出
+    handle_path /pads/* {
+        root * /srv/public/pads
+        file_server
+    }
+
+    # SSE 端点 — flush_interval -1 = 不缓冲, transport http versions 1.1 = 避免 HTTP/2 buffering 玄学
+    @fx_stream path_regexp ^/s/[a-zA-Z0-9_-]+/fx/stream$
+    handle @fx_stream {
+        reverse_proxy app:8080 {
+            flush_interval -1
+            transport http {
+                versions 1.1
+            }
+        }
     }
 
     # === 应用页面 ===
