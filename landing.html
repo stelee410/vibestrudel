@@ -63,22 +63,19 @@
   }
   .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--txt)}
   .logo-mark{
-    width:32px;height:32px;border-radius:8px;
-    background:conic-gradient(from 200deg, var(--orange), var(--amber), var(--mint), var(--sky), var(--magenta), var(--orange));
-    box-shadow:inset 0 0 0 2px #0d0e10, 0 0 18px #ff6b3550;
-    position:relative;animation:rotate 14s linear infinite;
+    width:34px;height:34px;
+    background-image:url("/assets/brand/vibe-icon.png");
+    background-repeat:no-repeat;background-position:center;background-size:contain;
+    transition:filter .2s ease;
   }
-  .logo-mark::after{
-    content:"";position:absolute;inset:6px;border-radius:50%;background:#0d0e10;
-    box-shadow:inset 0 0 6px #00000090;
-  }
-  @keyframes rotate{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  .brand:hover .logo-mark{filter:drop-shadow(0 0 12px #ff6b3580)}
   .brand h1{
-    font-family:var(--font-mono);font-size:14px;letter-spacing:.18em;font-weight:700;
+    margin:0;display:flex;align-items:center;gap:8px;
   }
-  .brand h1 .sep{color:var(--orange)}
-  .brand h1 .live{color:var(--mint);margin-left:6px;font-size:11px;
+  .brand h1 .wordmark{height:22px;width:auto;display:block}
+  .brand h1 .live{color:var(--mint);font-size:11px;
     border:1px solid #2e4a3a;padding:1px 6px;border-radius:3px;background:#0d1611;
+    font-family:var(--font-mono);letter-spacing:.14em;
   }
   nav{display:flex;align-items:center;gap:20px}
   nav a{
@@ -119,7 +116,15 @@
   .wave-grp{animation:scroll-wave linear infinite}
 
   /* hero 文本 */
-  .hero-inner{position:relative;z-index:2;max-width:1100px}
+  .hero-inner{position:relative;z-index:2;width:min(1400px, 94vw);max-width:1400px}
+  .sr-only{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0,0,0,0);white-space:nowrap;border:0;
+  }
+  .hero-wallpaper{
+    display:block;width:100%;height:auto;margin:0 auto 28px;
+    object-fit:contain;filter:drop-shadow(0 0 42px #ffffff12);
+  }
   .pretitle{
     font-family:var(--font-mono);font-size:11px;letter-spacing:.4em;color:var(--orange);
     text-transform:uppercase;margin-bottom:24px;
@@ -508,7 +513,7 @@
 <header class="top">
   <a href="/" class="brand">
     <div class="logo-mark"></div>
-    <h1>VIBE<span class="sep">//</span>STRUDEL<span class="live">LIVE</span></h1>
+    <h1><img class="wordmark" src="/assets/brand/vibe-wordmark.png" alt="vibe"><span class="live">LIVE</span></h1>
   </a>
   <nav>
     <a href="/app" data-i18n="nav.solo">Solo</a>
@@ -543,13 +548,8 @@
   </div>
 
   <div class="hero-inner">
-    <div class="pretitle">
-      <span class="dot"></span> <span data-i18n="landing.hero_pre">WORLD'S FIRST AI-POWERED COLLABORATIVE STRUDEL JAM</span>
-    </div>
-
-    <h1 class="title">
-      <span class="vibe">VIBE</span><span class="slash">//</span><span class="strudel">STRUDEL</span><span class="live-tag">LIVE</span>
-    </h1>
+    <img class="hero-wallpaper" src="/assets/brand/sonicite-vibe-live-hero.webp" alt="Sonicite Vibe LIVE">
+    <h1 class="sr-only">Sonicite Vibe LIVE</h1>
 
     <p class="tagline" data-i18n="landing.tagline_html"></p>
 

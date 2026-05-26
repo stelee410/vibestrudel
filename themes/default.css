@@ -152,22 +152,21 @@ header.topbar{
   transition:opacity .15s;
 }
 .brand:hover{opacity:.85}
-.brand:hover .logo{box-shadow:inset 0 0 0 2px #0d0e10, 0 0 24px #ff6b3580}
+.brand:hover .logo{filter:drop-shadow(0 0 12px #ff6b3580)}
 .brand .logo{
-  width:34px;height:34px;border-radius:8px;
-  background:conic-gradient(from 200deg, var(--accent), var(--accent-2), var(--led-on), var(--led-ai), var(--accent));
-  box-shadow:inset 0 0 0 2px #0d0e10, 0 0 16px #ff6b3540;
-  position:relative;
-}
-.brand .logo::after{
-  content:"";position:absolute;inset:6px;border-radius:50%;background:#0d0e10;
-  box-shadow:inset 0 0 6px #00000090;
+  width:36px;height:36px;
+  background-image:url("/assets/brand/vibe-icon.png");
+  background-repeat:no-repeat;background-position:center;background-size:contain;
+  transition:filter .2s ease;
 }
 .brand h1{
-  margin:0;font-size:18px;letter-spacing:.18em;font-weight:700;text-transform:uppercase;
+  margin:0;display:flex;align-items:center;
 }
-.brand h1 .sep{color:var(--accent);margin:0 2px}
-.brand .sub{font-family:var(--font-mono);font-size:10px;color:var(--txt-dim);letter-spacing:.2em;text-transform:uppercase}
+.brand h1 .wordmark{
+  height:24px;width:auto;display:block;
+  /* PNG 是 coral 色, 跟主题 accent 一致 */
+}
+.brand .sub{font-family:var(--font-mono);font-size:10px;color:var(--txt-dim);letter-spacing:.2em;text-transform:uppercase;margin-top:2px}
 
 .leds{display:flex;gap:18px;justify-content:center}
 .led{
@@ -763,8 +762,8 @@ body.mode-control header.topbar{
   border-color:#242932;border-radius:8px;
 }
 body.mode-control header.topbar .brand{gap:10px}
-body.mode-control header.topbar .brand .logo{width:28px;height:28px;border-radius:7px}
-body.mode-control header.topbar .brand h1{font-size:14px;letter-spacing:.14em}
+body.mode-control header.topbar .brand .logo{width:28px;height:28px}
+body.mode-control header.topbar .brand h1 .wordmark{height:18px}
 body.mode-control header.topbar .brand .sub,
 body.mode-control header.topbar #api-key-btn,
 body.mode-control header.topbar #lang-switcher{display:none}
@@ -1732,7 +1731,7 @@ footer.transport{
     grid-template-columns:auto 1fr auto;
   }
   body.mode-input header.topbar .brand .wordmark,
-  body.mode-control header.topbar .brand .wordmark{font-size:13px}
+  body.mode-control header.topbar .brand .wordmark{height:16px}
   body.mode-input header.topbar .leds,
   body.mode-control header.topbar .leds{display:none}
   body.mode-input header.topbar .top-modes,
