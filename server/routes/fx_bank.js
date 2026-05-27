@@ -8,11 +8,72 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { addCost, getMonthCost } from "../lib/redis.js";
+import { addCost, getMonthCost, getSession } from "../lib/redis.js";
 import { callGemini, estimateCost } from "../lib/llm.js";
 
 const PADS_DIR = process.env.PADS_DIR || "/app/data/pads";
+const LIBRARY_DIR = process.env.LIBRARY_DIR || "/app/data/library";
 const BUDGET_CAP = parseFloat(process.env.MONTHLY_CAP_USD || "30");
+
+// 全局音乐库 — 每次 gen 写一个 {id}.mp3 + {id}.json
+function newAssetId() {
+  // timestamp (~9 base36 chars) + 5 random hex — 排序天然按时间 + 唯一
+  return Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+}
+
+// 用 LLM 提 3-5 个 tag (英文 lowercase short). 失败 → 空 tags 不阻塞
+async function extractTagsFromGen({ apiKey, baseUrl, prompt, bpm, style }) {
+  const sys = `You output ONLY a JSON array of 3-5 short English lowercase tags describing this generated music.
+Tags cover: genre, mood, instrument hint, energy, era. Examples: ["techno","dark","industrial","138bpm","minimal"].
+NO sentences. NO explanations. JUST the array.`;
+  const userText = [
+    `Prompt: ${prompt}`,
+    bpm ? `BPM: ${bpm}` : null,
+    style ? `Style: ${style}` : null,
+  ].filter(Boolean).join("\n");
+  const body = {
+    model: process.env.GEMINI_MODEL || "vibe-music",
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: userText },
+    ],
+    temperature: 0.3,
+    max_tokens: 2000,   // Gemini thought_signature 吃几百, JSON 输出小, 给够
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "tags",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: { tags: { type: "array", items: { type: "string" } } },
+          required: ["tags"],
+          additionalProperties: false,
+        },
+      },
+    },
+  };
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`tag LLM ${res.status}`);
+  const data = await res.json();
+  const text = data?.choices?.[0]?.message?.content || "";
+  let parsed;
+  try { parsed = JSON.parse(text); } catch {
+    const m = text.match(/\{[\s\S]*?\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
+  }
+  const arr = parsed?.tags;
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(t => typeof t === "string")
+    .slice(0, 6)
+    .map(t => t.toLowerCase().trim().slice(0, 24))
+    .filter(t => t.length > 0);
+}
 
 // MiniMax 音乐生成: ~30-60s, ~2MB 输出. cooldown 防滥用
 const _genLastAt = new Map();   // sid -> ts
@@ -240,6 +301,7 @@ export default async function fxBankRoutes(fastify) {
       });
     }
     _genLastAt.set(id, Date.now());
+    const cur = await getSession(id);   // 可能为 null (session 过期), 不致命 — 只影响 styleHint 默认值
 
     try {
       console.log(`[fx-bank] sid=${id} music gen: "${promptWithBpm.slice(0, 80)}"${safeBpm ? ` (bpm hint=${safeBpm})` : ""}`);
@@ -247,29 +309,45 @@ export default async function fxBankRoutes(fastify) {
       const { bytes, durationMs, elapsedMs } = await callMiniMaxMusic({ apiKey, baseUrl, prompt: promptWithBpm });
       console.log(`[fx-bank] sid=${id} MiniMax returned ${(bytes.length/1024).toFixed(0)}KB ${durationMs}ms music in ${elapsedMs}ms`);
 
-      const sessionDir = path.join(PADS_DIR, id, "music");
-      await fs.rm(sessionDir, { recursive: true, force: true });   // 清旧
-      await fs.mkdir(sessionDir, { recursive: true });
-      // 保留 full.mp3 — 客户端 granular synth + 整段播放需要
-      const fullPath = path.join(sessionDir, "full.mp3");
-      await fs.writeFile(fullPath, bytes);
+      // 全局库: 每次写 unique id, 不再覆盖. 也不再 16 切片 (granular 用 full)
+      await fs.mkdir(LIBRARY_DIR, { recursive: true });
+      const assetId = newAssetId();
+      const mp3Path = path.join(LIBRARY_DIR, `${assetId}.mp3`);
+      const jsonPath = path.join(LIBRARY_DIR, `${assetId}.json`);
+      await fs.writeFile(mp3Path, bytes);
 
-      await sliceMp3IntoN(fullPath, sessionDir, durationMs, 16);
-      // full.mp3 不删, granular 用它
+      // tags 提取 (失败不阻塞主流程)
+      let tags = [];
+      try {
+        tags = await extractTagsFromGen({
+          apiKey, baseUrl,
+          prompt: promptWithBpm,
+          bpm: safeBpm,
+          style: cur?.styleHint,
+        });
+        if (tags.length) console.log(`[fx-bank] sid=${id} tags:`, tags.join(", "));
+      } catch (e) {
+        console.warn(`[fx-bank] sid=${id} tags extract fail:`, e.message);
+      }
+
+      const asset = {
+        id: assetId,
+        createdAt: Date.now(),
+        sid: id,                       // 谁生成的 (审计 + 可能用于"我的库")
+        prompt: promptWithBpm,
+        bpm: safeBpm,
+        style: cur?.styleHint || null,
+        tags,
+        durationMs,
+        bytes: bytes.length,
+        url: `/library/${assetId}.mp3`,
+      };
+      await fs.writeFile(jsonPath, JSON.stringify(asset, null, 2));
 
       await addCost(MINIMAX_COST_USD);
 
-      const pads = await listPadType(id, "music");
-      console.log(`[fx-bank] sid=${id} sliced ${pads.length} pads, total ${((Date.now()-t0)/1000).toFixed(1)}s`);
-      return {
-        ok: true,
-        pads,
-        full: { url: `/pads/${id}/music/full.mp3`, durationMs, bytes: bytes.length },
-        durationMs,
-        prompt: promptWithBpm,
-        bpm: safeBpm,
-        sliceMs: Math.round(durationMs / 16),
-      };
+      console.log(`[fx-bank] sid=${id} library asset ${assetId} created in ${((Date.now()-t0)/1000).toFixed(1)}s`);
+      return { ok: true, asset };
     } catch (e) {
       console.error(`[fx-bank] sid=${id} error:`, e.message);
       _genLastAt.delete(id);   // 失败释放 cooldown
@@ -369,22 +447,41 @@ export default async function fxBankRoutes(fastify) {
     }
   });
 
-  // === GET /s/:id/fx-bank — 列已有 pad 库 (UI 加载时调用) ===
+  // === GET /s/:id/fx-bank — 列 per-session sfx (music 已迁全局库, 见 /fx-bank/library) ===
   fastify.get("/s/:id/fx-bank", async (req, reply) => {
     const { id } = req.params;
     if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) {
       return reply.code(400).send({ error: "invalid_id" });
     }
-    const [music, sfx] = await Promise.all([
-      listPadType(id, "music"),
-      listPadType(id, "sfx"),
-    ]);
-    // 检查 full.mp3 (granular + 整段播放源)
-    let full = null;
+    const sfx = await listPadType(id, "sfx");
+    return { sfx };
+  });
+
+  // === GET /fx-bank/library — 全局音乐库列表 (所有 session 共享) ===
+  fastify.get("/fx-bank/library", async (req, reply) => {
+    const limit = Math.min(100, parseInt(req.query.limit || "30", 10));
+    const q = ((req.query.q || "") + "").toLowerCase().trim();
     try {
-      const stat = await fs.stat(path.join(PADS_DIR, id, "music", "full.mp3"));
-      full = { url: `/pads/${id}/music/full.mp3`, bytes: stat.size };
-    } catch(_){}
-    return { music, sfx, full };
+      const files = await fs.readdir(LIBRARY_DIR);
+      // ID 前缀是 Date.now().toString(36), lexicographic 排序后倒序 = 最新先
+      const jsons = files.filter(f => f.endsWith(".json")).sort().reverse();
+      const items = [];
+      for (const f of jsons) {
+        if (items.length >= limit) break;
+        try {
+          const txt = await fs.readFile(path.join(LIBRARY_DIR, f), "utf8");
+          const m = JSON.parse(txt);
+          if (q) {
+            const hay = `${m.prompt || ""} ${(m.tags || []).join(" ")} ${m.style || ""}`.toLowerCase();
+            if (!hay.includes(q)) continue;
+          }
+          items.push(m);
+        } catch(_){}
+      }
+      return { items, total: jsons.length };
+    } catch (e) {
+      if (e.code === "ENOENT") return { items: [], total: 0 };
+      return reply.code(500).send({ error: e.message });
+    }
   });
 }

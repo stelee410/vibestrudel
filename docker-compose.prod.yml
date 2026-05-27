@@ -40,6 +40,8 @@ services:
       - ./vendor/samples/vcsl.json:/app/manifests/vcsl.json:ro
       # session pad 库 (Phase 2 MiniMax 切片 / Phase 3 freesound SFX) — caddy 也 mount 同一个目录暴露给客户端
       - ./data/pads:/app/data/pads
+      # 全局音乐库 (跨 session, 每次 gen unique id, 数字资产)
+      - ./data/library:/app/data/library
     depends_on:
       - redis
     restart: unless-stopped
@@ -58,6 +60,7 @@ services:
       - ./vendor:/srv/public/vendor:ro
       - ./assets:/srv/public/assets:ro
       - ./data/pads:/srv/public/pads:ro
+      - ./data/library:/srv/public/library:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped

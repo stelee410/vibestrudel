@@ -381,7 +381,21 @@
   </div>
   <div class="fx-rack-body">
     <div class="fx-rack-section">
-      <label class="fx-rack-label">MUSIC PROMPT</label>
+      <div class="fx-rack-bank-header">
+        <span class="fx-rack-bank-name">MUSIC LIBRARY</span>
+        <span class="fx-rack-bank-hint">全局共享 · click 卡片 = 装载并广播</span>
+      </div>
+      <div class="fx-lib-toolbar">
+        <input type="text" id="fx-lib-search" class="fx-lib-search" placeholder="search prompt / tags...">
+        <button class="fx-lib-refresh" id="fx-lib-refresh" title="刷新">↻</button>
+      </div>
+      <div class="fx-lib-list" id="fx-lib-list">
+        <div class="fx-lib-empty">no assets yet — generate music below</div>
+      </div>
+    </div>
+
+    <div class="fx-rack-section">
+      <label class="fx-rack-label">GENERATE NEW</label>
       <textarea class="fx-rack-input" id="fx-rack-prompt" rows="2" maxlength="400"
         placeholder="128 BPM minimal techno in C minor, kick + hat + sub bass"></textarea>
       <div class="fx-rack-actions">
@@ -402,16 +416,48 @@
       </div>
       <div class="fx-bar-row">
         <span class="fx-bar-label">LOOP WINDOW</span>
-        <button class="fx-bar-btn" data-bars="1">1 BAR</button>
-        <button class="fx-bar-btn is-active" data-bars="2">2 BARS</button>
-        <button class="fx-bar-btn" data-bars="4">4 BARS</button>
+        <button class="fx-bar-btn" data-bars="1">1</button>
+        <button class="fx-bar-btn is-active" data-bars="2">2</button>
+        <button class="fx-bar-btn" data-bars="4">4</button>
+        <button class="fx-bar-btn" data-bars="8">8</button>
+        <button class="fx-bar-btn" data-bars="16">16</button>
+        <button class="fx-bar-btn" data-bars="32">32</button>
+        <span class="fx-bar-suffix">BARS</span>
+      </div>
+      <div class="fx-bar-row">
+        <span class="fx-bar-label">QUANTIZE</span>
+        <button class="fx-q-btn" data-q="now">FREE</button>
+        <button class="fx-q-btn is-active" data-q="next_16th">1/16</button>
+        <button class="fx-q-btn" data-q="next_8th">1/8</button>
+        <button class="fx-q-btn" data-q="next_quarter">1/4</button>
+        <button class="fx-q-btn" data-q="next_bar">1 BAR</button>
+        <label class="fx-auto-bpm">
+          <input type="checkbox" id="fx-auto-bpm"> AUTO BPM
+        </label>
       </div>
       <div class="fx-pb-row">
-        <button class="fx-pb-btn" id="fx-pb-oneshot" disabled title="从 cue 起播完整段, quantize 到下个 8 分音符">▶ ONE-SHOT</button>
-        <button class="fx-pb-btn" id="fx-pb-instant" disabled title="hold-and-release: 按住即时从 cue 播, 松手停">▶▶ INSTANT</button>
-        <button class="fx-pb-btn fx-pb-toggle" id="fx-pb-loop" disabled title="循环 (toggle), 在 cue 起 N 小节内循环, quantize 下个 bar">⟳ LOOP</button>
+        <button class="fx-pb-btn" id="fx-pb-oneshot" disabled title="从 cue 起播完整段">▶ ONE-SHOT</button>
+        <button class="fx-pb-btn" id="fx-pb-instant" disabled title="hold-and-release: 按住播, 松手停">▶▶ INSTANT</button>
+        <button class="fx-pb-btn fx-pb-toggle" id="fx-pb-loop" disabled title="循环 (toggle), 在 cue 起 N 小节内循环">⟳ LOOP</button>
         <button class="fx-pb-btn fx-pb-toggle" id="fx-pb-revloop" disabled title="反向循环 (toggle)">⟲ REV LOOP</button>
         <button class="fx-pb-btn fx-pb-stop" id="fx-pb-stop" disabled>■ STOP</button>
+      </div>
+      <div class="fx-pb-effects">
+        <label class="fx-gr-slider">
+          <span>VOLUME</span>
+          <input type="range" id="fx-pb-vol" min="0" max="100" step="1" value="85">
+          <span class="fx-gr-slider-val" id="fx-pb-vol-val">85%</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>LPF</span>
+          <input type="range" id="fx-pb-lpf" min="100" max="20000" step="50" value="20000">
+          <span class="fx-gr-slider-val" id="fx-pb-lpf-val">off</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>RESONANCE</span>
+          <input type="range" id="fx-pb-lpq" min="1" max="30" step="0.5" value="1">
+          <span class="fx-gr-slider-val" id="fx-pb-lpq-val">Q=1</span>
+        </label>
       </div>
     </div>
 
@@ -1513,12 +1559,13 @@
       const beatDur = 60 / bpm;
       let unit;
       switch (quantize) {
-        case "now":          return now + 0.020;
+        case "now":          return now + 0.005;   // FREE: 5ms 兜底 (浏览器调度)
+        case "next_16th":    unit = beatDur / 4; break;
         case "next_8th":     unit = beatDur / 2; break;
         case "next_quarter": unit = beatDur; break;
         case "next_half":    unit = beatDur * 2; break;
         case "next_bar":     unit = beatDur * 4; break;
-        default:             unit = beatDur / 2;
+        default:             unit = beatDur / 4;
       }
       const nextBoundary = Math.ceil(now / unit) * unit;
       // 边界离 now <10ms → 推到下一个, 防 audio engine 错过
@@ -1545,17 +1592,42 @@
 
     // ============ Granular + Playback engines ============
     // PlaybackController: 整段 4 模式 (oneshot/instant/loop/revloop)
+    // signal chain: source → filter(LPF) → gain → ctx.destination
     class PlaybackController {
       constructor(ctx) {
         this.ctx = ctx;
         this.buffer = null; this._reversed = null;
         this.activeSource = null;
+        this.playbackRate = 1.0;           // auto-BPM 调速
+        this.filter = ctx.createBiquadFilter();
+        this.filter.type = "lowpass";
+        this.filter.frequency.value = 20000;   // 默认 off (pass-through)
+        this.filter.Q.value = 0.7;
         this.outGain = ctx.createGain();
         this.outGain.gain.value = 0.85;
+        this.filter.connect(this.outGain);
         this.outGain.connect(ctx.destination);
       }
       setSource(buf) { this.stop(); this.buffer = buf; this._reversed = null; }
       hasSource() { return !!this.buffer; }
+      setVolume(v) { this.outGain.gain.setTargetAtTime(Math.max(0, Math.min(1, v)), this.ctx.currentTime, 0.02); }
+      setLpf(hz)   { this.filter.frequency.setTargetAtTime(Math.max(20, Math.min(20000, hz)), this.ctx.currentTime, 0.02); }
+      setLpq(q)    { this.filter.Q.setTargetAtTime(Math.max(0.1, Math.min(30, q)), this.ctx.currentTime, 0.02); }
+      setPlaybackRate(r) {
+        this.playbackRate = Math.max(0.25, Math.min(4, r));
+        if (this.activeSource) {
+          this.activeSource.playbackRate.setTargetAtTime(this.playbackRate, this.ctx.currentTime, 0.05);
+        }
+      }
+      updateLoopWindow(offsetSec, lengthSec) {
+        if (!this.activeSource || !this.activeSource.loop || !this.buffer) return;
+        const dur = this.buffer.duration;
+        const off = Math.max(0, Math.min(dur - 0.005, offsetSec));
+        const len = lengthSec > 0.05 ? lengthSec : dur;
+        // 即时写入 loopStart/loopEnd; AudioBufferSourceNode 在下个 loop 边界用新值
+        this.activeSource.loopStart = off;
+        this.activeSource.loopEnd = Math.min(dur, off + len);
+      }
       _getReversed() {
         if (this._reversed) return this._reversed;
         const b = this.buffer;
@@ -1572,6 +1644,7 @@
         const buf = opts.reverse ? this._getReversed() : this.buffer;
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
+        src.playbackRate.value = this.playbackRate;
         const dur = buf.duration;
         const offset = Math.max(0, Math.min(dur - 0.005, opts.offsetSec || 0));
         if (opts.loop) {
@@ -1585,7 +1658,7 @@
             src.loopEnd = dur;
           }
         }
-        src.connect(this.outGain);
+        src.connect(this.filter);   // 经过 LPF + Q
         const t = opts.when || this.ctx.currentTime;
         // start(when, offset, duration) — offset 在 buffer 内的起始秒
         src.start(t, offset);
@@ -1908,10 +1981,32 @@
       const wv = getWaveform();
       const p = evt.payload || {};
       const action = evt.sample.split(":")[1];
-      // music:cue — 仅同步 waveform UI 标记, 不出声
+      // music:cue — 同步 waveform UI 标记; loop 中改窗口 → 即时更新 loopStart/End (下个 loop 边界生效)
       if (action === "cue") {
         if (wv && typeof p.cuePos === "number") wv.setCue(p.cuePos);
         if (wv && typeof p.bars === "number") wv.setBars(p.bars);
+        if (pb && pb.activeSource && pb.activeSource.loop && pb.hasSource()) {
+          const dur = pb.buffer.duration;
+          const cuePos = typeof p.cuePos === "number" ? p.cuePos : (wv?.cuePos || 0);
+          const bars = typeof p.bars === "number" ? p.bars : (wv?.bars || 2);
+          const bpm = typeof p.bpm === "number" ? p.bpm : (state.bpm || 120);
+          const offsetSec = cuePos * dur;
+          const lengthSec = Math.min(dur - offsetSec, bars * 4 * (60 / bpm));
+          pb.updateLoopWindow(offsetSec, lengthSec);
+        }
+        return;
+      }
+      // music:rate — auto-BPM 速率
+      if (action === "rate") {
+        if (pb && typeof p.rate === "number") pb.setPlaybackRate(p.rate);
+        return;
+      }
+      // music:effects — vol/lpf/lpq
+      if (action === "effects") {
+        if (!pb) return;
+        if (typeof p.volume === "number") pb.setVolume(p.volume);
+        if (typeof p.lpf === "number") pb.setLpf(p.lpf);
+        if (typeof p.lpq === "number") pb.setLpq(p.lpq);
         return;
       }
       if (!pb || !pb.hasSource()) {
@@ -1953,7 +2048,17 @@
       const p = evt.payload || {};
       if (action === "load") {
         if (p.url) loadFullSource(p.url)
-          .then(buf => { gr.setSource(buf); getPlayback()?.setSource(buf); setMusicSourceAvailable(p.url); setGranularStatus(`✓ source ${buf.duration.toFixed(1)}s loaded`, "ok"); })
+          .then(buf => {
+            gr.setSource(buf); getPlayback()?.setSource(buf); setMusicSourceAvailable(p.url);
+            if (typeof p.bpm === "number") _currentAssetBpm = p.bpm;
+            // 如果接收端 AUTO BPM on, 应用速率
+            if (autoBpmChk?.checked) {
+              const sessionBpm = state.bpm || 120;
+              const assetBpm = _currentAssetBpm || sessionBpm;
+              getPlayback()?.setPlaybackRate(sessionBpm / assetBpm);
+            }
+            setGranularStatus(`✓ source ${buf.duration.toFixed(1)}s loaded`, "ok");
+          })
           .catch(e => console.warn("[granular] load fail", e));
         return;
       }
@@ -1961,7 +2066,17 @@
       if (action === "press") {
         if (typeof p.x === "number") gr.position = p.x;
         if (typeof p.y === "number") gr.pitch = (p.y - 0.5) * 24;
-        gr.press();
+        // 应用 quantize: FREE=now, 否则等到下个网格点
+        const q = evt.quantize || "now";
+        if (q === "now") {
+          gr.press();
+        } else {
+          const ctx = window.getAudioContext?.();
+          if (!ctx) return;
+          const when = nextQuantizeTime(q);
+          const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+          setTimeout(() => gr.press(), delayMs);
+        }
         const padEl = document.getElementById("fx-xy-pad");
         padEl?.classList.add("is-active");
       } else if (action === "move") {
@@ -2054,6 +2169,56 @@
         setGranularStatus("✗ " + e.message, "err");
       }
     }
+    // === Quantize 模式 (FREE / 1/16 / 1/8 / 1/4 / 1 BAR) — 影响所有触发 ===
+    let currentQuantize = "next_16th";
+    for (const b of document.querySelectorAll(".fx-q-btn")) {
+      b.addEventListener("click", () => {
+        document.querySelectorAll(".fx-q-btn").forEach(x => x.classList.remove("is-active"));
+        b.classList.add("is-active");
+        currentQuantize = b.dataset.q;
+      });
+    }
+
+    // === Asset BPM tracking + AUTO BPM toggle ===
+    let _currentAssetBpm = null;     // 当前装载 asset 的 BPM (来自 metadata)
+    const autoBpmChk = document.getElementById("fx-auto-bpm");
+    function applyAutoBpm() {
+      const sessionBpm = state.bpm || 120;
+      const assetBpm = _currentAssetBpm || sessionBpm;
+      const rate = autoBpmChk?.checked ? (sessionBpm / assetBpm) : 1.0;
+      triggerFx("music:rate", "now", { rate });
+    }
+    autoBpmChk?.addEventListener("change", applyAutoBpm);
+
+    // === Playback effects sliders (vol/lpf/lpq) ===
+    const pbEffects = {
+      vol: { el: document.getElementById("fx-pb-vol"), val: document.getElementById("fx-pb-vol-val"),
+             fmt: v => `${v}%`, scale: v => v / 100, key: "volume" },
+      lpf: { el: document.getElementById("fx-pb-lpf"), val: document.getElementById("fx-pb-lpf-val"),
+             fmt: v => v >= 19000 ? "off" : (v >= 1000 ? `${(v/1000).toFixed(1)}k` : `${v}`),
+             scale: v => parseInt(v, 10), key: "lpf" },
+      lpq: { el: document.getElementById("fx-pb-lpq"), val: document.getElementById("fx-pb-lpq-val"),
+             fmt: v => `Q=${v}`, scale: v => parseFloat(v), key: "lpq" },
+    };
+    let _pbEffectsTimer = null;
+    function pushPbEffectsThrottled() {
+      if (_pbEffectsTimer) clearTimeout(_pbEffectsTimer);
+      _pbEffectsTimer = setTimeout(() => {
+        const p = {};
+        for (const k of Object.keys(pbEffects)) {
+          const c = pbEffects[k]; if (!c.el) continue;
+          p[c.key] = c.scale(c.el.value);
+        }
+        triggerFx("music:effects", "now", p);
+      }, 80);
+    }
+    for (const k of Object.keys(pbEffects)) {
+      const c = pbEffects[k]; if (!c.el) continue;
+      const updateUI = () => { c.val.textContent = c.fmt(c.el.value); };
+      updateUI();
+      c.el.addEventListener("input", () => { updateUI(); pushPbEffectsThrottled(); });
+    }
+
     // === Waveform cue 同步广播 + bar size 切换 ===
     const wvInstance = getWaveform();
     let _cueBroadcastTimer = null;
@@ -2085,7 +2250,7 @@
         bpm: state.bpm || 120,
       };
     }
-    pbBtns.oneshot?.addEventListener("click", () => triggerFx("music:oneshot", "next_8th", currentMusicPayload()));
+    pbBtns.oneshot?.addEventListener("click", () => triggerFx("music:oneshot", currentQuantize, currentMusicPayload()));
     // INSTANT = momentary gate: 按下出声, 松开停止 (现场 stab + 长按拉伸)
     if (pbBtns.instant) {
       pbBtns.instant.addEventListener("pointerdown", (e) => {
@@ -2106,12 +2271,12 @@
     pbBtns.loop?.addEventListener("click", () => {
       const on = pbBtns.loop.classList.contains("is-active");
       if (on) triggerFx("music:stop", "now");
-      else    triggerFx("music:loop", "next_bar", currentMusicPayload());
+      else    triggerFx("music:loop", currentQuantize, currentMusicPayload());
     });
     pbBtns.revloop?.addEventListener("click", () => {
       const on = pbBtns.revloop.classList.contains("is-active");
       if (on) triggerFx("music:stop", "now");
-      else    triggerFx("music:revloop", "next_bar", currentMusicPayload());
+      else    triggerFx("music:revloop", currentQuantize, currentMusicPayload());
     });
     pbBtns.stop?.addEventListener("click", () => triggerFx("music:stop", "now"));
     loadGrBtn?.addEventListener("click", () => {
@@ -2166,7 +2331,7 @@
     if (xyPad) {
       xyPad.addEventListener("pointerdown", (e) => {
         if (!_granular || !_granular.hasSource()) {
-          setGranularStatus("先点 LOAD INTO GRANULAR", "err");
+          setGranularStatus("先生成或选择音乐", "err");
           return;
         }
         unlockAudioNow();
@@ -2175,7 +2340,8 @@
         xyPad.classList.add("is-active");
         updateXYFromEvent(e);
         drawXYPad();
-        triggerFx("granular:press", "now", { x: xyX, y: xyY });
+        // granular press 也走 currentQuantize: FREE=立即, 1/16=对齐
+        triggerFx("granular:press", currentQuantize, { x: xyX, y: xyY });
       });
       xyPad.addEventListener("pointermove", (e) => {
         if (!xyDown) return;
@@ -2233,17 +2399,89 @@
     }
     document.getElementById("fx-gr-reverse")?.addEventListener("change", pushParamsThrottled);
 
+    // === MUSIC LIBRARY (全局共享) ===
+    const libListEl = document.getElementById("fx-lib-list");
+    const libSearchEl = document.getElementById("fx-lib-search");
+    const libRefreshBtn = document.getElementById("fx-lib-refresh");
+    let _currentAssetId = null;
+
+    function fmtDuration(ms) {
+      const s = Math.round(ms / 1000);
+      return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+    }
+    function renderLibrary(items) {
+      if (!libListEl) return;
+      if (!items || items.length === 0) {
+        libListEl.innerHTML = '<div class="fx-lib-empty">no assets yet — generate music below</div>';
+        return;
+      }
+      libListEl.innerHTML = "";
+      for (const a of items) {
+        const card = document.createElement("button");
+        card.className = "fx-lib-card" + (a.id === _currentAssetId ? " is-current" : "");
+        card.dataset.assetId = a.id;
+        const tagsHtml = (a.tags || []).slice(0, 3).map(t =>
+          `<span class="fx-lib-card-tag">${t.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span>`
+        ).join("");
+        const title = (a.prompt || "(no prompt)").replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+        card.innerHTML = `
+          <span class="fx-lib-card-icon">▶</span>
+          <div class="fx-lib-card-body">
+            <div class="fx-lib-card-title" title="${title}">${title}</div>
+            <div class="fx-lib-card-meta">
+              ${a.bpm ? `<span class="fx-lib-card-bpm">${a.bpm}BPM</span>` : ""}
+              <span class="fx-lib-card-dur">${fmtDuration(a.durationMs)}</span>
+              ${tagsHtml}
+            </div>
+          </div>
+        `;
+        card.addEventListener("click", async () => {
+          _currentAssetId = a.id;
+          _currentAssetBpm = a.bpm || null;
+          renderLibrary(items);  // re-render to mark current
+          setMusicSourceAvailable(a.url);
+          await loadIntoEnginesLocal(a.url);
+          // 通知所有 session 客户端 load 同一个 asset (附带 bpm 让对端也能 auto-bpm)
+          triggerFx("granular:load", "now", { url: a.url, bpm: a.bpm });
+          // 如果 AUTO BPM 当前 on, 自动应用速率
+          if (autoBpmChk?.checked) applyAutoBpm();
+        });
+        libListEl.appendChild(card);
+      }
+    }
+    let _libCache = [];
+    async function refreshLibrary() {
+      try {
+        const q = (libSearchEl?.value || "").trim();
+        const url = `/fx-bank/library?limit=50${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        _libCache = data.items || [];
+        renderLibrary(_libCache);
+      } catch (e) {
+        console.warn("[fx-lib] refresh:", e.message);
+      }
+    }
+    libRefreshBtn?.addEventListener("click", refreshLibrary);
+    let _libSearchTimer = null;
+    libSearchEl?.addEventListener("input", () => {
+      clearTimeout(_libSearchTimer);
+      _libSearchTimer = setTimeout(refreshLibrary, 250);
+    });
+
     async function refreshBank() {
+      // 只刷 sfx (music 走 library 单独刷新)
       try {
         const res = await fetch(`/s/${SESSION_ID}/fx-bank`);
         if (!res.ok) return;
         const data = await res.json();
         renderPadGrid(rackGridSfx, "sfx", data.sfx || []);
-        if (data.full?.url) setMusicSourceAvailable(data.full.url);
-        else setMusicSourceAvailable(null);
       } catch (e) {
         console.warn("[fx-rack] refreshBank:", e.message);
       }
+      // music library 一并刷
+      await refreshLibrary();
     }
 
     // 初始空 sfx pad 网格
@@ -2295,14 +2533,21 @@
             throw new Error(msg);
           }
           const dt = ((Date.now() - t0) / 1000).toFixed(1);
-          setRackStatus(`✓ ${(data.durationMs/1000).toFixed(1)}s music ready (${dt}s)`, "ok");
-          if (data.full?.url) {
-            // 重要: full.mp3 文件名同名覆盖, 加 ?v=ts cache-bust 防 loadFullSource 复用旧 buffer
-            const versioned = `${data.full.url}?v=${Date.now()}`;
-            setMusicSourceAvailable(versioned);
-            // 自动 load 到本机引擎 + 通知所有客户端 (同样带版本号)
-            await loadIntoEnginesLocal(versioned);
-            triggerFx("granular:load", "now", { url: versioned });
+          const asset = data.asset;
+          if (asset?.url) {
+            setRackStatus(`✓ ${(asset.durationMs/1000).toFixed(1)}s · ${(asset.tags || []).slice(0,3).join(" ")} (${dt}s)`, "ok");
+            _currentAssetId = asset.id;
+            _currentAssetBpm = asset.bpm || null;
+            setMusicSourceAvailable(asset.url);
+            // 自动 load 到本机引擎
+            await loadIntoEnginesLocal(asset.url);
+            // 广播给所有 session 客户端 (含 bpm)
+            triggerFx("granular:load", "now", { url: asset.url, bpm: asset.bpm });
+            if (autoBpmChk?.checked) applyAutoBpm();
+            // 刷新库列表 (新 asset 出现在最前)
+            await refreshLibrary();
+          } else {
+            setRackStatus(`✓ done (${dt}s) — no asset returned`, "ok");
           }
         } catch (e) {
           setRackStatus("✗ " + e.message, "err");

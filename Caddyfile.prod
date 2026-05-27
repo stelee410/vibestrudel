@@ -28,9 +28,20 @@
         reverse_proxy app:8080
     }
 
-    # pad 静态文件 — 服务端切好的 mp3 直出
+    # 全局音乐库 list endpoint
+    handle /fx-bank/library {
+        reverse_proxy app:8080
+    }
+
+    # pad 静态文件 (per-session SFX) — 服务端切好的 mp3 直出
     handle_path /pads/* {
         root * /srv/public/pads
+        file_server
+    }
+
+    # 全局音乐库静态文件 — unique id, 不冲突 CF 缓存
+    handle_path /library/* {
+        root * /srv/public/library
         file_server
     }
 

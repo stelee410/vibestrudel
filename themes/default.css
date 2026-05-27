@@ -681,6 +681,70 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 #fx-gr-status.ok{ color:var(--led-on) }
 #fx-gr-status.busy{ color:var(--led-warn) }
 
+/* === Music Library 列表 === */
+.fx-lib-toolbar{
+  display:flex; gap:6px; margin-bottom:8px;
+}
+.fx-lib-search{
+  flex:1; padding:6px 10px;
+  background:var(--surface-deep); color:var(--txt);
+  border:1px solid var(--panel-edge); border-radius:5px;
+  font-family:var(--font-mono); font-size:11px; outline:none;
+}
+.fx-lib-search:focus{ border-color:var(--led-ai); box-shadow:0 0 0 2px var(--led-ai)33 }
+.fx-lib-search::placeholder{ color:var(--txt-faint); font-style:italic }
+.fx-lib-refresh{
+  width:32px; background:transparent; color:var(--led-ai);
+  border:1px solid var(--panel-edge); border-radius:5px; cursor:pointer;
+  font-size:14px; line-height:1; padding:0;
+}
+.fx-lib-refresh:hover{ background:#13261d; border-color:var(--led-ai) }
+.fx-lib-list{
+  display:flex; flex-direction:column; gap:5px;
+  max-height:170px; overflow-y:auto;
+  padding-right:4px;
+}
+.fx-lib-empty{
+  padding:14px 8px; text-align:center;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.16em;
+  color:var(--txt-faint); text-transform:uppercase;
+}
+.fx-lib-card{
+  display:flex; gap:8px; align-items:flex-start;
+  background:linear-gradient(180deg,#15171b,#0e1014);
+  border:1px solid var(--panel-edge); border-radius:6px;
+  padding:7px 9px; cursor:pointer; transition:.1s;
+  text-align:left; font-family:var(--font-mono);
+}
+.fx-lib-card:hover{ border-color:var(--led-ai); box-shadow:0 0 8px var(--led-ai)44 }
+.fx-lib-card.is-current{
+  border-color:var(--led-on); background:linear-gradient(180deg,#13261d,#0a1610);
+  box-shadow:0 0 8px var(--led-on)55;
+}
+.fx-lib-card-icon{
+  width:24px; height:24px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; color:var(--led-ai); font-weight:700;
+}
+.fx-lib-card.is-current .fx-lib-card-icon{ color:var(--led-on) }
+.fx-lib-card-body{ flex:1; min-width:0 }
+.fx-lib-card-title{
+  font-size:11px; color:var(--txt); font-weight:600;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  margin-bottom:3px;
+}
+.fx-lib-card-meta{
+  display:flex; gap:5px; flex-wrap:wrap;
+  font-size:8px; letter-spacing:.06em; color:var(--txt-dim);
+  text-transform:uppercase;
+}
+.fx-lib-card-bpm{ color:var(--accent); font-weight:700 }
+.fx-lib-card-dur{ color:var(--txt-dim) }
+.fx-lib-card-tag{
+  padding:1px 5px; background:#1a2235; color:var(--led-ai);
+  border-radius:3px; font-weight:700;
+}
+
 /* === Waveform display + cue/loop overlay === */
 .fx-wave-wrap{
   position:relative;
@@ -718,6 +782,38 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 .fx-bar-btn.is-active{
   color:#0a0b0e; background:var(--led-ai); border-color:var(--led-ai);
   box-shadow:0 0 8px var(--led-ai)66;
+}
+.fx-bar-suffix{
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.16em; color:var(--txt-faint);
+  text-transform:uppercase; margin-left:2px;
+}
+
+/* QUANTIZE 模式选择 — 复用 .fx-bar-btn 样式但稍变色区分 */
+.fx-q-btn{
+  font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.1em;
+  padding:5px 9px; cursor:pointer; text-transform:uppercase;
+  background:transparent; color:var(--txt-dim);
+  border:1px solid var(--panel-edge); border-radius:4px; transition:.1s;
+}
+.fx-q-btn:hover{ color:var(--accent); border-color:var(--accent) }
+.fx-q-btn.is-active{
+  color:#0a0b0e; background:var(--accent); border-color:var(--accent);
+  box-shadow:0 0 8px var(--accent)66;
+}
+
+.fx-auto-bpm{
+  display:flex; align-items:center; gap:6px; margin-left:auto;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.14em; color:var(--txt-dim);
+  text-transform:uppercase; cursor:pointer;
+}
+.fx-auto-bpm input{ accent-color:var(--led-on); cursor:pointer }
+.fx-auto-bpm:has(input:checked){ color:var(--led-on) }
+
+/* Playback effects (vol/lpf/lpq) — 复用 .fx-gr-slider grid */
+.fx-pb-effects{
+  display:flex; flex-direction:column; gap:5px;
+  margin-top:8px; padding-top:8px;
+  border-top:1px dashed var(--panel-edge);
 }
 .fs-btn.is-fs{color:var(--led-on);border-color:var(--led-on);box-shadow:0 0 0 1px var(--led-on)40}
 .scene-btn:hover,

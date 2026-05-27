@@ -62,7 +62,7 @@ if [ "$DO_SERVER" = "1" ]; then
   rsync -az Caddyfile.prod "${REMOTE}:${REMOTE_DIR}/Caddyfile.prod"
   rsync -az docker-compose.prod.yml "${REMOTE}:${REMOTE_DIR}/docker-compose.yml"   # 远端 compose 文件名 = docker-compose.yml
   echo "==> ensure data dir + rebuild docker app..."
-  ssh "$REMOTE" "cd ${REMOTE_DIR} && mkdir -p data/pads && docker compose build app && docker compose up -d app caddy"
+  ssh "$REMOTE" "cd ${REMOTE_DIR} && mkdir -p data/pads data/library && chmod 777 data/pads data/library && docker compose build app && docker compose up -d app caddy"
 fi
 
 # 4) 重启 vibe-caddy — 因为单文件 bind-mount 被 rsync rename 后, 容器看的是旧 inode

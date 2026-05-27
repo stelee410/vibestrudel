@@ -62,7 +62,7 @@ setInterval(() => {
 
 // === 校验 ===
 const SAMPLE_NAME_RE = /^[a-zA-Z0-9_:.-]{1,60}$/;
-const ALLOWED_QUANTIZE = new Set(["now", "next_8th", "next_quarter", "next_half", "next_bar"]);
+const ALLOWED_QUANTIZE = new Set(["now", "next_16th", "next_8th", "next_quarter", "next_half", "next_bar"]);
 
 function sanitizeBy(by) {
   if (typeof by !== "string") return "anon";
