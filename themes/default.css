@@ -127,24 +127,28 @@ body.mode-show::after{display:none}
 
 #app{
   display:grid;
+  width:100vw;max-width:100vw;          /* 显式锁宽, 防 grid track 因 topbar/hydra-ctl 撑大 push 出 viewport */
   height:100vh;height:100svh;          /* svh = 永远取最小视口, 不会被 iOS 地址栏挤压 */
   grid-template-rows:64px 1fr 64px;
+  grid-template-columns:minmax(0, 1fr);   /* 显式单列, minmax 防 intrinsic-content 撑大 */
   gap:10px;padding:10px;
   padding-left:max(10px, env(safe-area-inset-left));
   padding-right:max(10px, env(safe-area-inset-right));
   padding-bottom:max(10px, env(safe-area-inset-bottom));
   /* 关键: 否则 #hydra-canvas (fixed, z-index:0) 会盖在 #app (static) 之上挡掉 UI */
   position:relative; z-index:1;
+  overflow:hidden;          /* 兜底: topbar 内部超宽时仅内部裁切, 不外溢 */
 }
 
 /* ===== Top Bar ===== */
 header.topbar{
-  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;
+  display:grid;grid-template-columns:auto minmax(0, 1fr) auto;align-items:center;gap:18px;
   padding:0 18px;border-radius:var(--r-panel);
   background:var(--bar-grad);
   border:1px solid var(--panel-edge);
   box-shadow:var(--panel-shadow);
   position:relative;
+  min-width:0;overflow:hidden;     /* 防右侧按钮+hydra-ctl 内容过长撑宽 topbar */
 }
 .brand{
   display:flex;align-items:center;gap:14px;
@@ -519,10 +523,11 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 .fx-btn.flash{background:var(--led-ai);color:#0a0b0e;box-shadow:0 0 12px var(--led-ai)}
 .fx-btn.is-open{background:var(--led-ai);color:#0a0b0e}
 
-/* === FX RACK 浮窗 (非 modal — 不挡 stage, 表演时可常驻) === */
+/* === FX RACK 浮窗 (非 modal — 不挡 stage, 表演时可常驻)
+   定位: top-right, 避开 bottom 的 transport 和 input zone. */
 .fx-rack{
-  position:fixed; bottom:88px; right:18px;
-  width:380px; max-height:78vh;
+  position:fixed; top:84px; right:18px;
+  width:580px; max-height:calc(100vh - 168px);   /* 减 topbar+transport+padding */
   background:linear-gradient(180deg, #15171b, #0e1014);
   border:1px solid var(--panel-edge);
   border-radius:var(--r-panel);
@@ -613,6 +618,107 @@ body.mode-show.is-playing .show-art{ animation-duration:0.6s }
 }
 .fx-rack-grid-disabled .fx-pad{ opacity:.25 }
 .fx-rack-grid-disabled .fx-pad:hover{ transform:none; border-color:var(--panel-edge); color:var(--txt-dim) }
+
+/* === PLAYBACK 4 模式按钮 === */
+.fx-pb-row{
+  display:grid; grid-template-columns:repeat(5, 1fr); gap:5px;
+}
+.fx-pb-btn{
+  font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.1em;
+  padding:9px 6px; cursor:pointer; text-transform:uppercase;
+  background:linear-gradient(180deg,#161a20,#0c0d10);
+  color:var(--led-ai); border:1px solid var(--panel-edge); border-radius:6px;
+  transition:.1s; white-space:nowrap;
+}
+.fx-pb-btn:hover:not(:disabled){ border-color:var(--led-ai); background:#13261d; box-shadow:0 0 8px var(--led-ai)55 }
+.fx-pb-btn:disabled{ opacity:.35; cursor:not-allowed }
+.fx-pb-btn.fx-pb-stop{ color:var(--led-err); border-color:#3a1a22 }
+.fx-pb-btn.fx-pb-stop:hover:not(:disabled){ border-color:var(--led-err); background:#26101a; box-shadow:0 0 8px var(--led-err)55 }
+.fx-pb-btn.is-active{
+  background:var(--led-ai); color:#0a0b0e; border-color:var(--led-ai);
+  box-shadow:0 0 14px var(--led-ai)aa;
+}
+
+/* === XY pad canvas === */
+.fx-xy-pad{
+  display:block; width:100%; max-width:360px; height:220px;
+  background:linear-gradient(180deg,#0a0d12,#06070a);
+  border:1px solid var(--panel-edge); border-radius:8px;
+  cursor:crosshair; touch-action:none; user-select:none;
+}
+.fx-xy-pad.is-active{ border-color:var(--led-ai); box-shadow:inset 0 0 24px var(--led-ai)33 }
+.fx-xy-labels{
+  display:flex; justify-content:space-between; margin-top:4px; margin-bottom:10px;
+  font-family:var(--font-mono); font-size:8px; letter-spacing:.16em; color:var(--txt-faint);
+  text-transform:uppercase;
+}
+.fx-xy-x{ flex:1 }
+.fx-xy-y{ text-align:right }
+
+/* === Granular sliders === */
+.fx-gr-sliders{ display:flex; flex-direction:column; gap:6px }
+.fx-gr-slider{
+  display:grid; grid-template-columns:80px 1fr 50px; gap:8px; align-items:center;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; color:var(--txt-dim);
+  text-transform:uppercase;
+}
+.fx-gr-slider input[type=range]{
+  width:100%; height:4px; accent-color:var(--led-ai);
+  background:transparent; cursor:pointer;
+}
+.fx-gr-slider-val{
+  text-align:right; color:var(--led-ai); font-weight:700;
+}
+.fx-gr-checkbox{
+  display:flex; align-items:center; gap:8px; margin-top:4px;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; color:var(--txt-dim);
+  text-transform:uppercase; cursor:pointer;
+}
+.fx-gr-checkbox input{ accent-color:var(--led-ai); cursor:pointer }
+.fx-gr-load{ width:100% }
+.fx-gr-load.is-loaded{ color:var(--led-on); border-color:var(--led-on) }
+.fx-gr-load.is-loaded:hover{ box-shadow:0 0 10px var(--led-on)55 }
+#fx-gr-status.ok{ color:var(--led-on) }
+#fx-gr-status.busy{ color:var(--led-warn) }
+
+/* === Waveform display + cue/loop overlay === */
+.fx-wave-wrap{
+  position:relative;
+  background:linear-gradient(180deg,#0a0d12,#06070a);
+  border:1px solid var(--panel-edge);border-radius:8px;
+  overflow:hidden;
+  margin-bottom:8px;
+}
+.fx-wave-canvas{
+  display:block; width:100%; height:140px;
+  cursor:crosshair; touch-action:none; user-select:none;
+}
+.fx-wave-empty-hint{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.18em;
+  color:var(--txt-faint); text-transform:uppercase;
+  pointer-events:none;
+}
+
+/* bar-size selector */
+.fx-bar-row{
+  display:flex; gap:6px; margin-bottom:8px; align-items:center;
+}
+.fx-bar-label{
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.18em; color:var(--txt-dim);
+  text-transform:uppercase; margin-right:4px;
+}
+.fx-bar-btn{
+  font-family:var(--font-mono); font-size:9px; font-weight:700; letter-spacing:.12em;
+  padding:5px 10px; cursor:pointer; text-transform:uppercase;
+  background:transparent; color:var(--txt-dim);
+  border:1px solid var(--panel-edge); border-radius:4px; transition:.1s;
+}
+.fx-bar-btn:hover{ color:var(--txt); border-color:var(--led-ai) }
+.fx-bar-btn.is-active{
+  color:#0a0b0e; background:var(--led-ai); border-color:var(--led-ai);
+  box-shadow:0 0 8px var(--led-ai)66;
+}
 .fs-btn.is-fs{color:var(--led-on);border-color:var(--led-on);box-shadow:0 0 0 1px var(--led-on)40}
 .scene-btn:hover,
 .bg-btn:hover,
@@ -979,7 +1085,7 @@ body.mode-control #control-panel{
 
 /* ===== Main ===== */
 main{
-  display:grid;grid-template-columns:1.05fr 1fr;gap:10px;min-height:0;
+  display:grid;grid-template-columns:minmax(0, 1.05fr) minmax(0, 1fr);gap:10px;min-height:0;min-width:0;
   grid-template-rows: minmax(0,1fr) auto;
 }
 .preset-rack{
@@ -1543,15 +1649,15 @@ body.hydra-on .hydra-ctl{
 }
 .chip:hover{color:var(--txt);border-color:var(--accent);background:var(--surface-raised)}
 
-/* input row: [tools] [vibe>] [textarea] [SEND] */
-.input-row{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:stretch}
+/* input row: [tools] [vibe>] [textarea] [SEND] — minmax(0,1fr) 防 textarea 长内容把 SEND 推出视口 */
+.input-row{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:8px;align-items:stretch}
 .prompt-prefix{
   font-family:var(--font-mono);color:var(--accent);
   display:flex;align-items:center;padding:0 8px;border:1px solid var(--panel-edge);
   border-radius:var(--r-ctrl);background:var(--surface-deep);font-size:13px;letter-spacing:.05em;
 }
 textarea#prompt{
-  width:100%;resize:none;min-height:46px;max-height:140px;
+  width:100%;min-width:0;resize:none;min-height:46px;max-height:140px;
   background:var(--surface-deep);color:var(--txt);border:1px solid var(--panel-edge);
   border-radius:var(--r-ctrl);padding:10px 12px;font-family:var(--font-mono);
   font-size:13px;line-height:1.45;outline:none;transition:.15s;
@@ -1563,6 +1669,8 @@ textarea#prompt:focus{border-color:var(--accent);box-shadow:var(--focus-ring)}
   background:var(--send-grad);
   border:1px solid var(--accent-edge);border-radius:var(--r-ctrl);padding:0 16px;cursor:pointer;
   box-shadow:var(--send-shadow);transition:.15s;
+  min-width:78px;          /* 防 grid auto-track 把它算成 0 */
+  position:relative;z-index:5;   /* 高过 fx-rack 浮窗 (z-index:90 是另一坐标系, 这里只防同栈兄弟挡) */
 }
 .send:hover{filter:brightness(1.08)}
 .send:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(.4)}

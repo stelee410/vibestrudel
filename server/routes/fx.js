@@ -32,8 +32,9 @@ async function ensureSubscriber() {
 
 // === per-session 速率限制 (in-memory token bucket) ===
 // 防止单 session 被刷成洪水. 跨进程不严, 防滥用足够.
-const FX_RATE_PER_SEC = 10;
-const FX_BURST = 12;
+// XY pad 30Hz throttle 客户端已限, 这里给 60/s burst 100 留余地
+const FX_RATE_PER_SEC = 60;
+const FX_BURST = 100;
 const _buckets = new Map();   // sid -> { tokens, lastRefill }
 
 function tryConsumeFxToken(sid) {
@@ -77,7 +78,7 @@ export default async function fxRoutes(fastify) {
     if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) {
       return reply.code(400).send({ error: "invalid_id" });
     }
-    const { sample, quantize = "next_8th", by = "anon", gain } = req.body || {};
+    const { sample, quantize = "next_8th", by = "anon", gain, payload } = req.body || {};
     if (typeof sample !== "string" || !SAMPLE_NAME_RE.test(sample)) {
       return reply.code(400).send({ error: "invalid_sample", details: "sample name must match [a-zA-Z0-9_:.-]{1,60}" });
     }
@@ -85,6 +86,12 @@ export default async function fxRoutes(fastify) {
       return reply.code(400).send({ error: "invalid_quantize", details: `must be one of: ${[...ALLOWED_QUANTIZE].join(", ")}` });
     }
     const safeGain = (typeof gain === "number" && gain >= 0 && gain <= 1.5) ? gain : null;
+    // payload: 小 JSON object (granular XY/params 等), cap ~500 字符
+    let safePayload = null;
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const s = JSON.stringify(payload);
+      if (s.length <= 500) safePayload = payload;
+    }
     if (!tryConsumeFxToken(id)) {
       return reply.code(429).send({ error: "fx_rate_limited", details: `max ${FX_RATE_PER_SEC}/sec per session` });
     }
@@ -94,6 +101,7 @@ export default async function fxRoutes(fastify) {
       by: sanitizeBy(by),
       sentAt: Date.now(),
       ...(safeGain !== null ? { gain: safeGain } : {}),
+      ...(safePayload ? { payload: safePayload } : {}),
     };
     await redis.publish(`fx:${id}`, JSON.stringify(event));
     return { ok: true, event };

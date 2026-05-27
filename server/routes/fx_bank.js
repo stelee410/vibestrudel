@@ -217,12 +217,19 @@ export default async function fxBankRoutes(fastify) {
       return reply.code(429).send({ reason: "budget_exceeded" });
     }
 
-    const { prompt } = req.body || {};
+    const { prompt, bpm } = req.body || {};
     const safePrompt = (typeof prompt === "string" && prompt.length > 0 && prompt.length <= 400)
       ? prompt.trim() : null;
     if (!safePrompt) {
       return reply.code(400).send({ error: "invalid_prompt", details: "prompt: string 1-400 chars" });
     }
+    // BPM 注入到 prompt — MiniMax 不保证严格同步, 但通常会偏靠近
+    const safeBpm = (Number.isFinite(bpm) && bpm >= 40 && bpm <= 240) ? Math.round(bpm) : null;
+    const promptWithBpm = safeBpm
+      ? (/\b(\d{2,3})\s*(?:bpm|cpm|拍)\b/i.test(safePrompt)
+          ? safePrompt   // user 已自带 BPM 词, 不重复
+          : `${safePrompt}, at ${safeBpm} BPM`)
+      : safePrompt;
 
     const lastAt = _genLastAt.get(id) || 0;
     const cooldownLeftMs = GEN_COOLDOWN_MS - (Date.now() - lastAt);
@@ -235,19 +242,20 @@ export default async function fxBankRoutes(fastify) {
     _genLastAt.set(id, Date.now());
 
     try {
-      console.log(`[fx-bank] sid=${id} music gen: "${safePrompt.slice(0, 80)}"`);
+      console.log(`[fx-bank] sid=${id} music gen: "${promptWithBpm.slice(0, 80)}"${safeBpm ? ` (bpm hint=${safeBpm})` : ""}`);
       const t0 = Date.now();
-      const { bytes, durationMs, elapsedMs } = await callMiniMaxMusic({ apiKey, baseUrl, prompt: safePrompt });
+      const { bytes, durationMs, elapsedMs } = await callMiniMaxMusic({ apiKey, baseUrl, prompt: promptWithBpm });
       console.log(`[fx-bank] sid=${id} MiniMax returned ${(bytes.length/1024).toFixed(0)}KB ${durationMs}ms music in ${elapsedMs}ms`);
 
       const sessionDir = path.join(PADS_DIR, id, "music");
       await fs.rm(sessionDir, { recursive: true, force: true });   // 清旧
       await fs.mkdir(sessionDir, { recursive: true });
-      const srcPath = path.join(sessionDir, "_src.mp3");
-      await fs.writeFile(srcPath, bytes);
+      // 保留 full.mp3 — 客户端 granular synth + 整段播放需要
+      const fullPath = path.join(sessionDir, "full.mp3");
+      await fs.writeFile(fullPath, bytes);
 
-      await sliceMp3IntoN(srcPath, sessionDir, durationMs, 16);
-      await fs.unlink(srcPath).catch(() => {});
+      await sliceMp3IntoN(fullPath, sessionDir, durationMs, 16);
+      // full.mp3 不删, granular 用它
 
       await addCost(MINIMAX_COST_USD);
 
@@ -256,8 +264,10 @@ export default async function fxBankRoutes(fastify) {
       return {
         ok: true,
         pads,
+        full: { url: `/pads/${id}/music/full.mp3`, durationMs, bytes: bytes.length },
         durationMs,
-        prompt: safePrompt,
+        prompt: promptWithBpm,
+        bpm: safeBpm,
         sliceMs: Math.round(durationMs / 16),
       };
     } catch (e) {
@@ -369,6 +379,12 @@ export default async function fxBankRoutes(fastify) {
       listPadType(id, "music"),
       listPadType(id, "sfx"),
     ]);
-    return { music, sfx };
+    // 检查 full.mp3 (granular + 整段播放源)
+    let full = null;
+    try {
+      const stat = await fs.stat(path.join(PADS_DIR, id, "music", "full.mp3"));
+      full = { url: `/pads/${id}/music/full.mp3`, bytes: stat.size };
+    } catch(_){}
+    return { music, sfx, full };
   });
 }

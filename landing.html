@@ -93,8 +93,9 @@
 
   /* === Hero === */
   .hero{
-    min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:120px 24px 60px;position:relative;text-align:center;
+    /* min-height auto = 跟随内容; padding 控制上下留白. 不再强制 100vh, 避免 CTA 下方一整屏黑空 */
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:120px 24px 40px;position:relative;text-align:center;
   }
 
   /* 背景多层 oscilloscope 波形 */
@@ -121,9 +122,20 @@
     position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0,0,0,0);white-space:nowrap;border:0;
   }
+  /* hero 背景墙纸 — 绝对铺底, 在 waves 之上, hero-inner 之下
+     用 contain 完整显示, 居中, 低 opacity 当 watermark, 不被裁切 */
   .hero-wallpaper{
-    display:block;width:100%;height:auto;margin:0 auto 28px;
-    object-fit:contain;filter:drop-shadow(0 0 42px #ffffff12);
+    position:absolute;inset:0;width:100%;height:100%;
+    object-fit:contain;object-position:center;
+    z-index:1;opacity:.42;pointer-events:none;
+    filter:saturate(1.05);
+  }
+  /* 暗底渐变 — 让上层文本/CTA 在亮处也可读 */
+  .hero::before{
+    content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(900px 600px at 50% 45%, transparent 0%, #08090b50 55%, #08090be8 100%),
+      linear-gradient(180deg, #08090b50 0%, transparent 30%, transparent 60%, #08090b 100%);
   }
   .pretitle{
     font-family:var(--font-mono);font-size:11px;letter-spacing:.4em;color:var(--orange);
@@ -152,6 +164,13 @@
     background:linear-gradient(135deg, var(--mint), var(--cyan), var(--sky));
     -webkit-background-clip:text;background-clip:text;color:transparent;
     text-shadow:0 0 60px #7cffb630;
+  }
+  .title .jam-tag{
+    display:inline-block;font-size:.18em;vertical-align:super;
+    font-family:var(--font-mono);font-weight:700;letter-spacing:.2em;
+    color:var(--bg);background:var(--mint);padding:3px 10px;border-radius:4px;
+    margin-left:.2em;text-shadow:none;text-transform:uppercase;
+    box-shadow:0 0 20px #7cffb650;
   }
   .title .live-tag{
     display:inline-block;font-size:.18em;vertical-align:super;
@@ -547,9 +566,12 @@
     </svg>
   </div>
 
+  <img class="hero-wallpaper" src="/assets/brand/sonicite-vibe-live-hero.webp" alt="" aria-hidden="true">
+
   <div class="hero-inner">
-    <img class="hero-wallpaper" src="/assets/brand/sonicite-vibe-live-hero.webp" alt="Sonicite Vibe LIVE">
-    <h1 class="sr-only">Sonicite Vibe LIVE</h1>
+    <h1 class="title">
+      <span class="vibe">vibe</span><span class="slash">//</span><span class="strudel">strudel</span><span class="jam-tag">jam</span>
+    </h1>
 
     <p class="tagline" data-i18n="landing.tagline_html"></p>
 
