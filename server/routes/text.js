@@ -184,6 +184,8 @@ If the user request conflicts with these rules, the session creator's rules win.
         })(code);
         // LLM 常幻觉一些不存在的 sample 名 → 映射到真实音色 (静默 404 vs 真出声)
         codeAfterCheck = aliasMissingSamples(codeAfterCheck);
+        // 鼓 voice 不该 duck (尤其 kick 自己 duck = 冲掉底鼓). 剥掉鼓行上的 .duck()
+        codeAfterCheck = stripDuckFromDrums(codeAfterCheck);
         // 校验主代码
         const v = validate(codeAfterCheck, validNames);
         if (!v.ok) {
@@ -331,6 +333,45 @@ function aliasMissingSamples(code) {
     if (changed) console.warn(`[sample-alias] "${content}" → "${rewritten.join(" ")}"`);
     return prefix + quote + rewritten.join(" ") + quote;
   });
+}
+
+// 鼓 voice 不该 sidechain duck — 尤其 kick 自己 .duck() = 把底鼓冲掉.
+// 逐行扫: 如果这一行是 drum voice (s("...") 里含鼓 token) 且带 .duck(...), 删掉 .duck(...).
+// 只动鼓行, 不碰 note(...).duck() 的 bass/pad (它们才是合理 sidechain 目标).
+const DRUM_TOKEN_RE = /\bs\(\s*["'][^"']*\b(bd|sd|hh|oh|cp|rim|cr|rd|lt|mt|ht|sh|cb|tb|cy|perc|clap|kick|snare|hat|tom)\b/i;
+const DUCK_RE = /\.duck(?:depth|attack|onset|orbit)?\s*\([^)]*\)/gi;
+function stripDuckFromDrums(code) {
+  if (typeof code !== "string" || !code) return code;
+  let drumStripped = 0;
+  // 1) 鼓行的 duck 一律剥 (kick/snare/hat/clap/perc 不该 duck, 尤其 kick 自 duck = 冲掉底鼓)
+  let lines = code.split("\n").map(line => {
+    if (!DRUM_TOKEN_RE.test(line) || !/\.duck\s*\(/.test(line)) return line;
+    const stripped = line.replace(DUCK_RE, "");
+    if (stripped !== line) drumStripped++;
+    return stripped;
+  });
+  // 2) 全局 duck 上限 = 2 (bass + 最多一个 pad). 多出来的从后往前剥 (lead/pluck 通常在后面)
+  let total = 0;
+  for (const l of lines) total += (l.match(/\.duck\s*\(/g) || []).length;
+  let capStripped = 0;
+  if (total > 2) {
+    let keep = 2;
+    // 正序数前 2 个保留, 其余删
+    let seen = 0;
+    lines = lines.map(line => {
+      if (!/\.duck\s*\(/.test(line)) return line;
+      return line.replace(DUCK_RE, (m) => {
+        seen++;
+        if (seen <= keep) return m;       // 保留前 2
+        capStripped++;
+        return "";                        // 剥掉多余
+      });
+    });
+  }
+  if (drumStripped || capStripped) {
+    console.warn(`[duck-guard] stripped ${drumStripped} drum-duck + ${capStripped} over-cap duck`);
+  }
+  return lines.join("\n");
 }
 
 // 改写代码里的 setcpm/setcps 为目标 BPM. 找不到就在开头插一行

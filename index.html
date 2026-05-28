@@ -442,23 +442,6 @@
         <button class="fx-pb-btn fx-pb-toggle" id="fx-pb-revloop" disabled title="反向循环 (toggle)">⟲ REV LOOP</button>
         <button class="fx-pb-btn fx-pb-stop" id="fx-pb-stop" disabled>■ STOP</button>
       </div>
-      <div class="fx-pb-effects">
-        <label class="fx-gr-slider">
-          <span>VOLUME</span>
-          <input type="range" id="fx-pb-vol" min="0" max="100" step="1" value="85">
-          <span class="fx-gr-slider-val" id="fx-pb-vol-val">85%</span>
-        </label>
-        <label class="fx-gr-slider">
-          <span>LPF</span>
-          <input type="range" id="fx-pb-lpf" min="100" max="20000" step="50" value="20000">
-          <span class="fx-gr-slider-val" id="fx-pb-lpf-val">off</span>
-        </label>
-        <label class="fx-gr-slider">
-          <span>RESONANCE</span>
-          <input type="range" id="fx-pb-lpq" min="1" max="30" step="0.5" value="1">
-          <span class="fx-gr-slider-val" id="fx-pb-lpq-val">Q=1</span>
-        </label>
-      </div>
     </div>
 
     <div class="fx-rack-section">
@@ -469,7 +452,7 @@
       <div class="fx-rack-actions" style="margin-bottom:10px">
         <button class="fx-rack-btn fx-gr-load" id="fx-gr-load" disabled>→ LOAD INTO GRANULAR</button>
       </div>
-      <canvas class="fx-xy-pad" id="fx-xy-pad" width="360" height="220"
+      <canvas class="fx-xy-pad" id="fx-xy-pad" width="540" height="240"
         title="按住 + 拖动 = 演奏 (X=位置, Y=音高)"></canvas>
       <div class="fx-xy-labels">
         <div class="fx-xy-x">X · POSITION</div>
@@ -500,6 +483,50 @@
         <label class="fx-gr-checkbox">
           <input type="checkbox" id="fx-gr-reverse">
           <span>REVERSE GRAINS</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="fx-rack-section">
+      <div class="fx-rack-bank-header">
+        <span class="fx-rack-bank-name">MASTER FX</span>
+        <span class="fx-rack-bank-hint">applies to playback + granular + SFX</span>
+      </div>
+      <div class="fx-pb-effects">
+        <label class="fx-gr-slider">
+          <span>VOLUME</span>
+          <input type="range" id="fx-m-vol" min="0" max="120" step="1" value="85">
+          <span class="fx-gr-slider-val" id="fx-m-vol-val">85%</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>LPF</span>
+          <input type="range" id="fx-m-lpf" min="100" max="20000" step="50" value="20000">
+          <span class="fx-gr-slider-val" id="fx-m-lpf-val">off</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>RESONANCE</span>
+          <input type="range" id="fx-m-lpq" min="1" max="30" step="0.5" value="1">
+          <span class="fx-gr-slider-val" id="fx-m-lpq-val">Q=1</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>DELAY</span>
+          <input type="range" id="fx-m-delay" min="0" max="100" step="1" value="0">
+          <span class="fx-gr-slider-val" id="fx-m-delay-val">0%</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>DELAY TIME</span>
+          <input type="range" id="fx-m-delayt" min="30" max="1500" step="5" value="375">
+          <span class="fx-gr-slider-val" id="fx-m-delayt-val">375ms</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>DELAY FB</span>
+          <input type="range" id="fx-m-delayfb" min="0" max="90" step="1" value="40">
+          <span class="fx-gr-slider-val" id="fx-m-delayfb-val">40%</span>
+        </label>
+        <label class="fx-gr-slider">
+          <span>REVERB</span>
+          <input type="range" id="fx-m-reverb" min="0" max="100" step="1" value="0">
+          <span class="fx-gr-slider-val" id="fx-m-reverb-val">0%</span>
         </label>
       </div>
     </div>
@@ -1599,20 +1626,15 @@
         this.buffer = null; this._reversed = null;
         this.activeSource = null;
         this.playbackRate = 1.0;           // auto-BPM 调速
-        this.filter = ctx.createBiquadFilter();
-        this.filter.type = "lowpass";
-        this.filter.frequency.value = 20000;   // 默认 off (pass-through)
-        this.filter.Q.value = 0.7;
         this.outGain = ctx.createGain();
-        this.outGain.gain.value = 0.85;
-        this.filter.connect(this.outGain);
-        this.outGain.connect(ctx.destination);
+        this.outGain.gain.value = 1.0;     // passthrough — vol/lpf 都在 master 上
+        // 路由到共享 master FX (master 又出到 destination)
+        const mb = getMasterBus();
+        if (mb) this.outGain.connect(mb.input);
+        else this.outGain.connect(ctx.destination);
       }
       setSource(buf) { this.stop(); this.buffer = buf; this._reversed = null; }
       hasSource() { return !!this.buffer; }
-      setVolume(v) { this.outGain.gain.setTargetAtTime(Math.max(0, Math.min(1, v)), this.ctx.currentTime, 0.02); }
-      setLpf(hz)   { this.filter.frequency.setTargetAtTime(Math.max(20, Math.min(20000, hz)), this.ctx.currentTime, 0.02); }
-      setLpq(q)    { this.filter.Q.setTargetAtTime(Math.max(0.1, Math.min(30, q)), this.ctx.currentTime, 0.02); }
       setPlaybackRate(r) {
         this.playbackRate = Math.max(0.25, Math.min(4, r));
         if (this.activeSource) {
@@ -1627,6 +1649,8 @@
         // 即时写入 loopStart/loopEnd; AudioBufferSourceNode 在下个 loop 边界用新值
         this.activeSource.loopStart = off;
         this.activeSource.loopEnd = Math.min(dur, off + len);
+        this._loopStart = off;
+        this._loopEnd = Math.min(dur, off + len);
       }
       _getReversed() {
         if (this._reversed) return this._reversed;
@@ -1647,23 +1671,49 @@
         src.playbackRate.value = this.playbackRate;
         const dur = buf.duration;
         const offset = Math.max(0, Math.min(dur - 0.005, opts.offsetSec || 0));
+        let loopStart = 0, loopEnd = dur;
         if (opts.loop) {
           src.loop = true;
-          // loopStart/loopEnd 在 buffer time (秒). 反向时 buffer 已 flipped, 用同 offset/length 即可
           if (opts.lengthSec && opts.lengthSec > 0.05) {
-            src.loopStart = offset;
-            src.loopEnd = Math.min(dur, offset + opts.lengthSec);
-          } else {
-            src.loopStart = 0;
-            src.loopEnd = dur;
+            loopStart = offset;
+            loopEnd = Math.min(dur, offset + opts.lengthSec);
           }
+          src.loopStart = loopStart;
+          src.loopEnd = loopEnd;
         }
-        src.connect(this.filter);   // 经过 LPF + Q
+        src.connect(this.outGain);
         const t = opts.when || this.ctx.currentTime;
-        // start(when, offset, duration) — offset 在 buffer 内的起始秒
+        // 记录起点 — 用于计算播放头位置 (currentBufferTime)
+        this._startCtxTime = t;
+        this._startOffset = offset;
+        this._loopStart = loopStart;
+        this._loopEnd = loopEnd;
+        this._reverseActive = !!opts.reverse;
         src.start(t, offset);
         this.activeSource = src;
         src.onended = () => { if (this.activeSource === src) this.activeSource = null; };
+      }
+      // 当前播放在 buffer 内的位置 (秒). 不在播 → null
+      // 反向播 → 返回的是 ORIGINAL buffer 上的对应位置 (UI 显示用)
+      currentBufferTime() {
+        if (!this.activeSource || !this.buffer || this._startCtxTime == null) return null;
+        const dur = this.buffer.duration;
+        const elapsed = this.ctx.currentTime - this._startCtxTime;
+        if (elapsed < 0) return this._startOffset;   // 未到 start 时间 (quantize 等待中)
+        let pos = this._startOffset + elapsed * this.playbackRate;
+        if (this.activeSource.loop) {
+          const ls = this._loopStart, le = this._loopEnd, len = le - ls;
+          if (len > 0 && pos >= le) {
+            pos = ls + ((pos - ls) % len);
+          }
+        } else if (pos >= dur) {
+          return null;   // 已播完
+        }
+        // 反向: 在反向 buffer 内的 pos 映射回原 buffer 的视觉位置
+        if (this._reverseActive) {
+          pos = dur - pos;
+        }
+        return Math.max(0, Math.min(dur, pos));
       }
       oneshot(when, offsetSec = 0) { this._play({ when, offsetSec }); }
       instant(offsetSec = 0) { this._play({ when: this.ctx.currentTime + 0.005, offsetSec }); }
@@ -1693,11 +1743,22 @@
         this.ctx = ctx;
         this.buffer = null; this._reversed = null;
         this.position = 0.5; this.pitch = 0;
-        this.grainSizeMs = 60; this.density = 18; this.spread = 0.15;
+        this.grainSizeMs = 80; this.density = 24; this.spread = 0.2;
         this.dryWet = 1.0; this.reverse = false;
+        this.pitchJitter = 0.25;   // ±semitones per-grain (microsorganic 抖动)
+        this.stereoSpread = 0.6;   // ±0.3 pan
         this.active = false; this._intervalId = null; this._lastDensity = 0;
         this.outGain = ctx.createGain(); this.outGain.gain.value = 0.85;
-        this.outGain.connect(ctx.destination);
+        // 路由到共享 master FX
+        const mb = getMasterBus();
+        if (mb) this.outGain.connect(mb.input);
+        else this.outGain.connect(ctx.destination);
+        // Pre-compute Hann window for grain envelope (raised cosine, no clicks)
+        this._hannLen = 64;
+        this._hann = new Float32Array(this._hannLen);
+        for (let i = 0; i < this._hannLen; i++) {
+          this._hann[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (this._hannLen - 1)));
+        }
       }
       setSource(buf) { this.release(); this.buffer = buf; this._reversed = null; }
       hasSource() { return !!this.buffer; }
@@ -1736,20 +1797,27 @@
         if (!buf) return;
         const src = ctx.createBufferSource();
         src.buffer = buf;
-        src.playbackRate.value = Math.pow(2, this.pitch / 12);
+        // pitch jitter ±N semi 每 grain — 更自然不机械
+        const jitterSemi = (Math.random() - 0.5) * 2 * this.pitchJitter;
+        src.playbackRate.value = Math.pow(2, (this.pitch + jitterSemi) / 12);
         const dur = buf.duration;
         const grainDur = this.grainSizeMs / 1000;
         const center = this.position * dur;
-        const jitter = (Math.random() - 0.5) * this.spread * dur;
-        let startSec = center + jitter;
+        const posJitter = (Math.random() - 0.5) * this.spread * dur;
+        let startSec = center + posJitter;
         if (startSec < 0) startSec = 0;
         if (startSec > dur - grainDur) startSec = Math.max(0, dur - grainDur);
+        // Hann window envelope (raised cosine) — 平滑 attack/release 无 click
         const env = ctx.createGain();
         const t0 = ctx.currentTime;
+        const curve = new Float32Array(this._hannLen);
+        for (let i = 0; i < this._hannLen; i++) curve[i] = this._hann[i] * this.dryWet;
         env.gain.setValueAtTime(0, t0);
-        env.gain.linearRampToValueAtTime(this.dryWet, t0 + grainDur * 0.3);
-        env.gain.linearRampToValueAtTime(0, t0 + grainDur);
-        src.connect(env); env.connect(this.outGain);
+        env.gain.setValueCurveAtTime(curve, t0, grainDur);
+        // 每 grain 随机 stereo pan — 增加 width
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = (Math.random() - 0.5) * this.stereoSpread;
+        src.connect(env); env.connect(pan); pan.connect(this.outGain);
         src.start(t0, startSec, grainDur);
         src.stop(t0 + grainDur + 0.05);
       }
@@ -1765,9 +1833,12 @@
         this.peaks = null;   // Float32Array of [min, max] per column
         this.cuePos = 0;     // 0..1
         this.bars = 2;
-        this.bpm = 120;
+        this.sessionBpm = 120;     // 当前 session BPM (window 真实时间长度由此决定)
+        this.playbackRate = 1.0;   // 1.0 / (sessionBpm/assetBpm) 当 AUTO BPM on
         this.dragging = false;
-        this.onCueChange = null;   // (cuePos) => void, fired on user-driven cue moves
+        this.onCueChange = null;
+        this.getPlayhead = null;   // () => seconds-in-buffer | null, 用于绘制播放头
+        this._raf = null;
         this._bindPointer();
       }
       setBuffer(audioBuffer) {
@@ -1781,7 +1852,19 @@
         this.draw();
       }
       setBars(bars) { this.bars = bars; this.draw(); }
-      setBpm(bpm) { this.bpm = bpm; this.draw(); }
+      setSessionBpm(bpm) { this.sessionBpm = bpm || 120; this.draw(); }
+      setPlaybackRate(rate) { this.playbackRate = rate > 0 ? rate : 1.0; this.draw(); }
+      // 启动一个 rAF loop 持续重绘播放头. 若没在播 → 自动 idle
+      startPlayheadLoop() {
+        if (this._raf) return;
+        const tick = () => {
+          this._raf = null;
+          if (!this.canvas.isConnected) return;
+          this.draw();
+          this._raf = requestAnimationFrame(tick);
+        };
+        this._raf = requestAnimationFrame(tick);
+      }
       _computePeaks() {
         const W = this.canvas.width;
         const ch0 = this.buffer.getChannelData(0);
@@ -1817,10 +1900,12 @@
           const y2 = mid + max * mid;
           ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
         }
-        // === loop window (translucent rectangle from cue, width = bars * 4 beats * (60/bpm) sec) ===
+        // === loop window ===
+        // 真实播放时间 = N session bars at session tempo (用户期望: 我的 jam N 小节)
+        // buffer 时间 = 真实时间 / playbackRate (AUTO BPM 拉过 buffer 走得快/慢)
         const dur = this.buffer.duration;
-        const beatSec = 60 / (this.bpm || 120);
-        const winSec = this.bars * 4 * beatSec;
+        const realSec = this.bars * 4 * (60 / (this.sessionBpm || 120));
+        const winSec = realSec / (this.playbackRate || 1.0);
         const cueX = this.cuePos * W;
         const winW = Math.min(W - cueX, (winSec / dur) * W);
         ctx.fillStyle = "rgba(122, 162, 255, 0.18)";
@@ -1828,6 +1913,23 @@
         ctx.strokeStyle = "#7aa2ff";
         ctx.lineWidth = 1;
         ctx.strokeRect(cueX + 0.5, 0.5, Math.max(0, winW - 1), H - 1);
+        // 播放头 (用 getPlayhead 回调获取实时位置)
+        if (this.getPlayhead) {
+          const playSec = this.getPlayhead();
+          if (playSec != null) {
+            const px = (playSec / dur) * W;
+            ctx.fillStyle = "rgba(124, 255, 182, 0.18)";
+            ctx.fillRect(px - 1, 0, 3, H);
+            ctx.strokeStyle = "#7cffb6";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+            // 三角顶
+            ctx.fillStyle = "#7cffb6";
+            ctx.beginPath();
+            ctx.moveTo(px - 5, H); ctx.lineTo(px + 5, H); ctx.lineTo(px, H - 7); ctx.closePath();
+            ctx.fill();
+          }
+        }
         // cue marker (triangle + vertical line)
         ctx.fillStyle = "#ff6b35";
         ctx.beginPath();
@@ -1836,7 +1938,7 @@
         ctx.strokeStyle = "#ff6b35";
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(cueX, 0); ctx.lineTo(cueX, H); ctx.stroke();
-        // time ruler at bottom
+        // time ruler at bottom + bar count badge top-right
         ctx.fillStyle = "#5a6370";
         ctx.font = "9px monospace";
         const labels = 5;
@@ -1847,6 +1949,13 @@
           const tw = ctx.measureText(txt).width;
           ctx.fillText(txt, Math.max(2, Math.min(W - tw - 2, x - tw/2)), H - 3);
         }
+        // window 长度提示 — 显示 real / buffer + rate
+        ctx.fillStyle = "#7aa2ff";
+        ctx.font = "10px monospace";
+        const rateInfo = Math.abs(this.playbackRate - 1.0) < 0.01
+          ? `${this.bars} BAR · ${realSec.toFixed(2)}s @ ${Math.round(this.sessionBpm)}BPM`
+          : `${this.bars} BAR · ${realSec.toFixed(2)}s real · ${winSec.toFixed(2)}s buf · rate ${this.playbackRate.toFixed(2)}×`;
+        ctx.fillText(rateInfo, 4, 12);
       }
       _xToCue(clientX) {
         const rect = this.canvas.getBoundingClientRect();
@@ -1872,6 +1981,74 @@
         c.addEventListener("pointerleave", end);
       }
     }
+
+    // === Master FX Bus (PlaybackController + GranularPlayer 都路过)
+    // 信号链: input → filter(LPF+Q) → gain(volume) →
+    //   ├─ dry         → destination
+    //   ├─ delay+fb    → delayWet → destination  (echo)
+    //   └─ reverb conv → reverbWet → destination
+    function _makeImpulseResponse(ctx, durationSec = 2.5, decay = 2.4) {
+      const sr = ctx.sampleRate;
+      const len = Math.max(1, Math.floor(sr * durationSec));
+      const ir = ctx.createBuffer(2, len, sr);
+      for (let c = 0; c < 2; c++) {
+        const data = ir.getChannelData(c);
+        for (let i = 0; i < len; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+        }
+      }
+      return ir;
+    }
+    let _masterBus = null;
+    function getMasterBus() {
+      if (_masterBus) return _masterBus;
+      const ctx = window.getAudioContext?.(); if (!ctx) return null;
+      const input = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 20000;
+      filter.Q.value = 0.7;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.85;
+      input.connect(filter);
+      filter.connect(gain);
+      // dry → destination
+      gain.connect(ctx.destination);
+      // delay (echo): gain → delayNode + fb loop → wet → destination
+      const delay = ctx.createDelay(2.5);
+      delay.delayTime.value = 0.375;
+      const fb = ctx.createGain();
+      fb.gain.value = 0.4;
+      const delayWet = ctx.createGain();
+      delayWet.gain.value = 0;
+      gain.connect(delay);
+      delay.connect(fb);
+      fb.connect(delay);
+      delay.connect(delayWet);
+      delayWet.connect(ctx.destination);
+      // reverb: gain → conv → wet → destination
+      const conv = ctx.createConvolver();
+      conv.buffer = _makeImpulseResponse(ctx, 2.5, 2.4);
+      const reverbWet = ctx.createGain();
+      reverbWet.gain.value = 0;
+      gain.connect(conv);
+      conv.connect(reverbWet);
+      reverbWet.connect(ctx.destination);
+      _masterBus = { ctx, input, filter, gain, delay, fb, delayWet, reverbWet };
+      return _masterBus;
+    }
+    // Setters (smoothed via setTargetAtTime)
+    function _smooth(param, v, tc = 0.03) {
+      const ctx = window.getAudioContext?.(); if (!ctx) return;
+      param.setTargetAtTime(v, ctx.currentTime, tc);
+    }
+    function setMasterVolume(v)    { const m=getMasterBus(); m && _smooth(m.gain.gain, Math.max(0,Math.min(1.2,v))); }
+    function setMasterLpf(hz)      { const m=getMasterBus(); m && _smooth(m.filter.frequency, Math.max(20,Math.min(20000,hz))); }
+    function setMasterLpq(q)       { const m=getMasterBus(); m && _smooth(m.filter.Q, Math.max(0.1,Math.min(30,q))); }
+    function setMasterReverb(wet)  { const m=getMasterBus(); m && _smooth(m.reverbWet.gain, Math.max(0,Math.min(1,wet))); }
+    function setMasterDelayWet(wet){ const m=getMasterBus(); m && _smooth(m.delayWet.gain, Math.max(0,Math.min(1,wet))); }
+    function setMasterDelayTime(s) { const m=getMasterBus(); m && _smooth(m.delay.delayTime, Math.max(0.01,Math.min(2.4,s)), 0.05); }
+    function setMasterDelayFb(fb)  { const m=getMasterBus(); m && _smooth(m.fb.gain, Math.max(0,Math.min(0.95,fb))); }
 
     let _playback = null, _granular = null, _waveform = null;
     function getWaveform() {
@@ -1925,6 +2102,8 @@
             handleMusicEvent(evt);
           } else if (prefix === "granular") {
             handleGranularEvent(evt);
+          } else if (prefix === "master") {
+            handleMasterEvent(evt);
           } else {
             const when = nextQuantizeTime(evt.quantize || "next_8th");
             playFxAt(evt.sample, when, typeof evt.gain === "number" ? evt.gain : 0.8);
@@ -1976,37 +2155,62 @@
     }
 
     // === SSE event dispatch handlers ===
+    function handleMasterEvent(evt) {
+      const action = evt.sample.split(":")[1];
+      const p = evt.payload || {};
+      if (action === "fx") {
+        if (typeof p.volume    === "number") setMasterVolume(p.volume);
+        if (typeof p.lpf       === "number") setMasterLpf(p.lpf);
+        if (typeof p.lpq       === "number") setMasterLpq(p.lpq);
+        if (typeof p.delayWet  === "number") setMasterDelayWet(p.delayWet);
+        if (typeof p.delayTime === "number") setMasterDelayTime(p.delayTime);
+        if (typeof p.delayFb   === "number") setMasterDelayFb(p.delayFb);
+        if (typeof p.reverbWet === "number") setMasterReverb(p.reverbWet);
+      }
+    }
+
     function handleMusicEvent(evt) {
       const pb = getPlayback();
       const wv = getWaveform();
       const p = evt.payload || {};
       const action = evt.sample.split(":")[1];
-      // music:cue — 同步 waveform UI 标记; loop 中改窗口 → 即时更新 loopStart/End (下个 loop 边界生效)
+      // music:cue — 同步 waveform UI 标记; loop 中改窗口 → 即时按 quantize 重启 (从新位置)
       if (action === "cue") {
         if (wv && typeof p.cuePos === "number") wv.setCue(p.cuePos);
         if (wv && typeof p.bars === "number") wv.setBars(p.bars);
         if (pb && pb.activeSource && pb.activeSource.loop && pb.hasSource()) {
           const dur = pb.buffer.duration;
           const cuePos = typeof p.cuePos === "number" ? p.cuePos : (wv?.cuePos || 0);
-          const bars = typeof p.bars === "number" ? p.bars : (wv?.bars || 2);
-          const bpm = typeof p.bpm === "number" ? p.bpm : (state.bpm || 120);
           const offsetSec = cuePos * dur;
-          const lengthSec = Math.min(dur - offsetSec, bars * 4 * (60 / bpm));
-          pb.updateLoopWindow(offsetSec, lengthSec);
+          let lengthSec = typeof p.lengthSec === "number" ? p.lengthSec : null;
+          if (lengthSec == null) {
+            const bars = typeof p.bars === "number" ? p.bars : (wv?.bars || 2);
+            const sessionBpm = state.bpm || 120;
+            const rate = wv?.playbackRate || 1.0;
+            lengthSec = bars * 4 * (60 / sessionBpm) / rate;
+          }
+          lengthSec = Math.min(dur - offsetSec, lengthSec);
+          // 用户手动改 cue/bars → 立即重启 (不等 quantize, 否则会听到旧 loop 继续播)
+          const restartAt = nextQuantizeTime("now");
+          const wasReverse = pb._reverseActive;
+          if (wasReverse) pb.revloop(restartAt, offsetSec, lengthSec);
+          else            pb.loop(restartAt, offsetSec, lengthSec);
         }
         return;
       }
       // music:rate — auto-BPM 速率
       if (action === "rate") {
         if (pb && typeof p.rate === "number") pb.setPlaybackRate(p.rate);
+        if (wv && typeof p.rate === "number") wv.setPlaybackRate(p.rate);
         return;
       }
       // music:effects — vol/lpf/lpq
+      // legacy music:effects (旧客户端) — 兼容映射到 master fx
       if (action === "effects") {
-        if (!pb) return;
-        if (typeof p.volume === "number") pb.setVolume(p.volume);
-        if (typeof p.lpf === "number") pb.setLpf(p.lpf);
-        if (typeof p.lpq === "number") pb.setLpq(p.lpq);
+        if (typeof p.volume === "number") setMasterVolume(p.volume);
+        if (typeof p.lpf === "number") setMasterLpf(p.lpf);
+        if (typeof p.lpq === "number") setMasterLpq(p.lpq);
+        if (typeof p.reverb === "number") setMasterReverb(p.reverb);
         return;
       }
       if (!pb || !pb.hasSource()) {
@@ -2016,9 +2220,14 @@
       const dur = pb.buffer.duration;
       const cuePos = typeof p.cuePos === "number" ? p.cuePos : (wv?.cuePos || 0);
       const offsetSec = cuePos * dur;
-      const bars = typeof p.bars === "number" ? p.bars : (wv?.bars || 2);
-      const bpm = typeof p.bpm === "number" ? p.bpm : (state.bpm || 120);
-      const lengthSec = Math.min(dur - offsetSec, bars * 4 * (60 / bpm));
+      let lengthSec = typeof p.lengthSec === "number" ? p.lengthSec : null;
+      if (lengthSec == null) {
+        const bars = typeof p.bars === "number" ? p.bars : (wv?.bars || 2);
+        const sessionBpm = state.bpm || 120;
+        const rate = wv?.playbackRate || 1.0;
+        lengthSec = bars * 4 * (60 / sessionBpm) / rate;
+      }
+      lengthSec = Math.min(dur - offsetSec, lengthSec);
       const loopBtn = document.getElementById("fx-pb-loop");
       const revBtn = document.getElementById("fx-pb-revloop");
       switch (action) {
@@ -2051,11 +2260,20 @@
           .then(buf => {
             gr.setSource(buf); getPlayback()?.setSource(buf); setMusicSourceAvailable(p.url);
             if (typeof p.bpm === "number") _currentAssetBpm = p.bpm;
+            // waveform 显示新音频 + session BPM (window 真实时长基准)
+            const wv = getWaveform();
+            if (wv) {
+              wv.setSessionBpm(state.bpm || 120);
+              wv.setBuffer(buf);
+            }
+            document.getElementById("fx-wave-empty")?.style.setProperty("display", "none");
             // 如果接收端 AUTO BPM on, 应用速率
             if (autoBpmChk?.checked) {
-              const sessionBpm = state.bpm || 120;
-              const assetBpm = _currentAssetBpm || sessionBpm;
-              getPlayback()?.setPlaybackRate(sessionBpm / assetBpm);
+              const rate = currentPlaybackRate();
+              getPlayback()?.setPlaybackRate(rate);
+              wv?.setPlaybackRate(rate);
+            } else {
+              wv?.setPlaybackRate(1.0);
             }
             setGranularStatus(`✓ source ${buf.duration.toFixed(1)}s loaded`, "ok");
           })
@@ -2159,7 +2377,8 @@
         // Waveform 加载 + 隐藏空提示
         const wv = getWaveform();
         if (wv) {
-          wv.setBpm(state.bpm || 120);
+          wv.setSessionBpm(state.bpm || 120);
+          wv.setPlaybackRate(currentPlaybackRate());
           wv.setBuffer(buf);
         }
         document.getElementById("fx-wave-empty")?.style.setProperty("display", "none");
@@ -2182,56 +2401,83 @@
     // === Asset BPM tracking + AUTO BPM toggle ===
     let _currentAssetBpm = null;     // 当前装载 asset 的 BPM (来自 metadata)
     const autoBpmChk = document.getElementById("fx-auto-bpm");
-    function applyAutoBpm() {
+    function currentPlaybackRate() {
       const sessionBpm = state.bpm || 120;
       const assetBpm = _currentAssetBpm || sessionBpm;
-      const rate = autoBpmChk?.checked ? (sessionBpm / assetBpm) : 1.0;
+      return autoBpmChk?.checked ? (sessionBpm / assetBpm) : 1.0;
+    }
+    function applyAutoBpm() {
+      const rate = currentPlaybackRate();
+      // 本地立即更新 (UI 反馈)
+      getPlayback()?.setPlaybackRate(rate);
+      wvInstance?.setPlaybackRate(rate);
+      // 广播给其他客户端
       triggerFx("music:rate", "now", { rate });
     }
     autoBpmChk?.addEventListener("change", applyAutoBpm);
 
-    // === Playback effects sliders (vol/lpf/lpq) ===
-    const pbEffects = {
-      vol: { el: document.getElementById("fx-pb-vol"), val: document.getElementById("fx-pb-vol-val"),
-             fmt: v => `${v}%`, scale: v => v / 100, key: "volume" },
-      lpf: { el: document.getElementById("fx-pb-lpf"), val: document.getElementById("fx-pb-lpf-val"),
-             fmt: v => v >= 19000 ? "off" : (v >= 1000 ? `${(v/1000).toFixed(1)}k` : `${v}`),
-             scale: v => parseInt(v, 10), key: "lpf" },
-      lpq: { el: document.getElementById("fx-pb-lpq"), val: document.getElementById("fx-pb-lpq-val"),
-             fmt: v => `Q=${v}`, scale: v => parseFloat(v), key: "lpq" },
+    // === Master FX sliders (整个 FX RACK 共享 — playback + granular 都过) ===
+    const masterSliders = {
+      vol:     { id:"fx-m-vol",    val:"fx-m-vol-val",    fmt:v=>`${v}%`,      scale:v=>v/100,     key:"volume" },
+      lpf:     { id:"fx-m-lpf",    val:"fx-m-lpf-val",    fmt:v=>v>=19000?"off":(v>=1000?`${(v/1000).toFixed(1)}k`:`${v}`), scale:v=>parseInt(v,10), key:"lpf" },
+      lpq:     { id:"fx-m-lpq",    val:"fx-m-lpq-val",    fmt:v=>`Q=${v}`,     scale:v=>parseFloat(v), key:"lpq" },
+      delay:   { id:"fx-m-delay",  val:"fx-m-delay-val",  fmt:v=>`${v}%`,      scale:v=>v/100,     key:"delayWet" },
+      delayt:  { id:"fx-m-delayt", val:"fx-m-delayt-val", fmt:v=>`${v}ms`,     scale:v=>parseInt(v,10)/1000, key:"delayTime" },
+      delayfb: { id:"fx-m-delayfb",val:"fx-m-delayfb-val",fmt:v=>`${v}%`,      scale:v=>v/100,     key:"delayFb" },
+      reverb:  { id:"fx-m-reverb", val:"fx-m-reverb-val", fmt:v=>`${v}%`,      scale:v=>v/100,     key:"reverbWet" },
     };
-    let _pbEffectsTimer = null;
-    function pushPbEffectsThrottled() {
-      if (_pbEffectsTimer) clearTimeout(_pbEffectsTimer);
-      _pbEffectsTimer = setTimeout(() => {
+    let _masterFxTimer = null;
+    function pushMasterFxThrottled() {
+      if (_masterFxTimer) clearTimeout(_masterFxTimer);
+      _masterFxTimer = setTimeout(() => {
         const p = {};
-        for (const k of Object.keys(pbEffects)) {
-          const c = pbEffects[k]; if (!c.el) continue;
-          p[c.key] = c.scale(c.el.value);
+        for (const k of Object.keys(masterSliders)) {
+          const c = masterSliders[k];
+          const el = document.getElementById(c.id);
+          if (!el) continue;
+          p[c.key] = c.scale(el.value);
         }
-        triggerFx("music:effects", "now", p);
+        triggerFx("master:fx", "now", p);
       }, 80);
     }
-    for (const k of Object.keys(pbEffects)) {
-      const c = pbEffects[k]; if (!c.el) continue;
-      const updateUI = () => { c.val.textContent = c.fmt(c.el.value); };
+    for (const k of Object.keys(masterSliders)) {
+      const c = masterSliders[k];
+      const el = document.getElementById(c.id);
+      const valEl = document.getElementById(c.val);
+      if (!el || !valEl) continue;
+      const updateUI = () => { valEl.textContent = c.fmt(el.value); };
       updateUI();
-      c.el.addEventListener("input", () => { updateUI(); pushPbEffectsThrottled(); });
+      el.addEventListener("input", () => { updateUI(); pushMasterFxThrottled(); });
     }
 
     // === Waveform cue 同步广播 + bar size 切换 ===
     const wvInstance = getWaveform();
+    // 计算当前 buffer 内 loop 窗口长度 (秒) — 真实时间 / playbackRate
+    function currentBufferWinSec() {
+      const sessionBpm = state.bpm || 120;
+      const bars = wvInstance?.bars ?? 2;
+      const realSec = bars * 4 * (60 / sessionBpm);
+      return realSec / currentPlaybackRate();
+    }
     let _cueBroadcastTimer = null;
     function broadcastCueThrottled() {
       if (_cueBroadcastTimer) clearTimeout(_cueBroadcastTimer);
       _cueBroadcastTimer = setTimeout(() => {
         if (!wvInstance) return;
-        triggerFx("music:cue", "now", { cuePos: wvInstance.cuePos, bars: wvInstance.bars });
+        triggerFx("music:cue", "now", {
+          cuePos: wvInstance.cuePos,
+          bars: wvInstance.bars,
+          lengthSec: currentBufferWinSec(),
+        });
       }, 60);
     }
     if (wvInstance) {
-      wvInstance.setBpm(state.bpm || 120);
+      wvInstance.setSessionBpm(state.bpm || 120);
+      wvInstance.setPlaybackRate(1.0);
       wvInstance.onCueChange = () => broadcastCueThrottled();
+      // 播放头 — 从 PlaybackController 读实时 buffer 位置
+      wvInstance.getPlayhead = () => getPlayback()?.currentBufferTime() ?? null;
+      wvInstance.startPlayheadLoop();   // 持续 rAF 重绘
     }
     for (const b of document.querySelectorAll(".fx-bar-btn")) {
       b.addEventListener("click", () => {
@@ -2242,12 +2488,12 @@
         broadcastCueThrottled();
       });
     }
-    // 当前 cue/bars 取自 waveform 实例; 触发时打包进 payload 一起广播
+    // 当前 cue/bars 打包广播 — 直接送 lengthSec, receivers 不用再算 BPM
     function currentMusicPayload() {
       return {
         cuePos: wvInstance?.cuePos ?? 0,
         bars: wvInstance?.bars ?? 2,
-        bpm: state.bpm || 120,
+        lengthSec: currentBufferWinSec(),
       };
     }
     pbBtns.oneshot?.addEventListener("click", () => triggerFx("music:oneshot", currentQuantize, currentMusicPayload()));

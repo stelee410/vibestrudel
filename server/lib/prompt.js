@@ -196,24 +196,24 @@ DRUMS:
       lead:  medium room (.room 0.3–0.5) + delay (.delayfb 0.3) — mid depth
       pad:   big room (.room 0.6–0.8) + roomsize 0.8 — back wall, atmospheric
 
-== SIDECHAIN / KICK-PUMPING — USE SPARINGLY, NOT ALWAYS ==
-.duck(N) makes that voice duck volume whenever pattern in orbit N hits.
-This creates "pumping" — characteristic of EDM/house/techno but WRONG for most other genres.
+== SIDECHAIN / KICK-PUMPING — DEFAULT IS *NO DUCK*. OPT-IN ONLY. ==
+.duck(N) makes that voice duck volume whenever pattern in orbit N hits → "pumping".
+⚠️ DO NOT add .duck() by default/reflex. Most stacks need ZERO duck. It is being OVER-USED.
+   A track with no .duck() at all is perfectly fine and usually cleaner.
 
-⚠️ WHEN to use .duck():
-  ✅ techno / house / EDM / trance / big-room / acid / dnb / dubstep
-     — pumping IS the genre. Without it, doesn't sound like these styles.
-  ❌ ambient / lo-fi / hip-hop / jazz / boom-bap / classical / world / cinematic
-     — pumping kills the vibe. Pads/strings should breathe naturally.
-  ❌ dub / reggae — the WET reverb/delay is the point, ducking destroys it
-  🟡 funk / disco — light duck OK on bass only, never on guitars/horns
+ONLY add duck when ALL of these hold:
+  1. Genre is explicitly four-on-floor pump: techno / house / EDM / trance / big-room / acid.
+     (ambient / lo-fi / hip-hop / jazz / dub / reggae / cinematic / world / funk / disco → NO duck.)
+  2. There is a steady kick on .orbit(2).
+  3. You duck AT MOST ONE voice — the SUB BASS only. (A pad MAY duck too only if the genre
+     is big-room/trance and the pad is a long wash — otherwise leave the pad alone.)
 
-⚠️ Strudel default orbit is 1. To use ducking SAFELY:
-  - Put kick on .orbit(2) (NOT .orbit(1) — that's default, kick would duck itself)
-  - Other voices stay on default orbit (don't chain .orbit())
-  - Only LOW + MID SUSTAINED voices (sub bass, pad, sustained chord) chain .duck(2)
-  - NEVER duck: hats, snares, claps, percussion, plucks, leads, marimba/kalimba, brass/strings melodies, vocals
-  - At most 2-3 voices should duck per stack — don't sprinkle .duck() everywhere
+HARD RULES (violating these "punches out" the kick — the #1 complaint):
+  ✗ NEVER put .duck() on a drum voice — kick, snare, clap, hat, perc, tom. EVER.
+    Especially never .duck() the kick itself — it would silence the very kick it's syncing to.
+  ✗ NEVER duck leads, plucks, arps, marimba/kalimba, brass/strings melody, vocals.
+  ✗ NEVER more than 2 .duck() calls in the whole stack. 1 is the norm. 0 is fine.
+  ✓ Kick goes on .orbit(2). The sub-bass (and at most one pad) chain .duck(2). Nothing else.
 
 CORRECT (techno — duck used purposefully):
   stack(
