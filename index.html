@@ -4953,12 +4953,34 @@ stack(
         const d=appendLine(cls); let i=0;
         const id=setInterval(()=>{
           d.textContent=text.slice(0,++i); consoleEl.scrollTop=consoleEl.scrollHeight;
+          if(i%2===0) sfxKey(0.05);   // 机器打字声 (轻)
           if(i>=text.length){ clearInterval(id); res(); }
         }, speed||22);
         T.cleanups.push(()=>clearInterval(id));
       });
     }
     function aborted(){ return !T.abort || T.abort.signal.aborted; }
+
+    // ---------- 复古 SFX — Web Audio 合成 (键盘声 / 弹窗 ding / 崩溃), 不依赖音频文件 ----------
+    let actx=null;
+    function ac(){
+      if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(_){ return null; } }
+      if(actx && actx.state==="suspended"){ actx.resume().catch(()=>{}); }
+      return actx;
+    }
+    function envGain(g,t0,a,d,peak){ g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(peak,t0+a); g.gain.exponentialRampToValueAtTime(0.0001,t0+a+d); }
+    function tone(freq,t0,a,d,peak,type){ const c=ac(); if(!c)return; const o=c.createOscillator(),g=c.createGain(); o.type=type||"sine"; o.frequency.setValueAtTime(freq,t0); envGain(g,t0,a,d,peak); o.connect(g).connect(c.destination); o.start(t0); o.stop(t0+a+d+0.05); }
+    function noiseBurst(t0,dur,peak,freq,q){ const c=ac(); if(!c)return; const n=Math.max(1,Math.floor(c.sampleRate*dur)); const buf=c.createBuffer(1,n,c.sampleRate); const ch=buf.getChannelData(0); for(let i=0;i<n;i++) ch[i]=Math.random()*2-1; const src=c.createBufferSource(); src.buffer=buf; const bp=c.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=freq||1800; bp.Q.value=q||1; const g=c.createGain(); envGain(g,t0,0.001,dur,peak); src.connect(bp).connect(g).connect(c.destination); src.start(t0); src.stop(t0+dur+0.02); }
+    function sfxKey(gain){ const c=ac(); if(!c)return; const t=c.currentTime; noiseBurst(t,0.028,(gain||0.1),2600,1.4); tone(160+Math.random()*40,t,0.001,0.025,(gain||0.1)*0.5,"square"); }
+    function sfxBeep(){ const c=ac(); if(!c)return; tone(920,c.currentTime,0.005,0.18,0.16,"square"); }              // BIOS POST 蜂鸣
+    function sfxDing(){ const c=ac(); if(!c)return; const t=c.currentTime; tone(987.77,t,0.005,0.5,0.2,"sine"); tone(1318.5,t+0.02,0.005,0.55,0.14,"sine"); }
+    function sfxError(){ const c=ac(); if(!c)return; const t=c.currentTime; tone(440,t,0.005,0.26,0.22,"sine"); tone(349.23,t+0.17,0.005,0.5,0.22,"sine"); } // 经典 "dah-dum"
+    function sfxCrash(){ const c=ac(); if(!c)return; const t=c.currentTime;
+      const o=c.createOscillator(),g=c.createGain(); o.type="sawtooth"; o.frequency.setValueAtTime(420,t); o.frequency.exponentialRampToValueAtTime(38,t+1.4);
+      g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.28,t+0.05); g.gain.exponentialRampToValueAtTime(0.0001,t+1.5);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t+1.55);
+      noiseBurst(t,0.5,0.16,800,0.7); noiseBurst(t+0.1,1.1,0.1,260,0.6);
+    }
 
     // ---------- LLM: chat — 走服务器云 key (/terminal/chat), 浏览器不需要配 key ----------
     async function callChat(convo){
@@ -4983,12 +5005,35 @@ stack(
       if(!o || !Array.isArray(o.timeline) || !o.timeline.length) throw new Error("bad show script");
       o.timeline = o.timeline.filter(b=>b && typeof b.code==="string" && b.code.trim()).sort((a,b)=>(a.at||0)-(b.at||0));
       if(!o.timeline.length) throw new Error("empty timeline");
+      repaceTimeline(o.timeline);   // 客户端接管注入节奏 → 保证 5–10 分钟梦核结构
       return o;
+    }
+    // 无视模型给的 at, 按 phase 重排每段停留时长, 累加成绝对时间.
+    // 梦核 = 慢速催眠, 每段久驻; 总时长落在 ~5.5–10 分钟.
+    function repaceTimeline(tl){
+      const dwell=(phase)=>{
+        const p=String(phase||"").toLowerCase();
+        if(p.includes("intro"))   return 40;
+        if(p.includes("outro"))   return 60;   // 长尾淡出
+        if(p.includes("break"))   return 42;
+        if(p.includes("drop")||p.includes("peak")||p.includes("climax")) return 44;
+        if(p.includes("theme")||p.includes("develop")||p.includes("variation")||p.includes("motif")) return 48;
+        if(p.includes("build")||p.includes("emerg")) return 40;
+        return 42;
+      };
+      let t=0;
+      for(const b of tl){ b.at=t; t+=dwell(b.phase); }
+      // 保底下限 ~5.5 分钟: 段数太少就等比拉伸
+      const FLOOR=330, CEIL=600;
+      if(t>0 && t<FLOOR){ const k=FLOOR/t; for(const b of tl) b.at=Math.round(b.at*k); t=FLOOR; }
+      if(t>CEIL){ const k=CEIL/t; for(const b of tl) b.at=Math.round(b.at*k); }   // 上限 ~10 分钟
+      return tl;
     }
 
     // ---------- phases ----------
     async function runBios(){
       setScreen("bios");
+      sfxBeep();   // 开机蜂鸣
       const pre=$("tm-bios-text"); let buf="";
       const put=async(s,d)=>{ buf+=s; pre.textContent=buf; await sleep(d==null?90:d); };
       await put("VibeOS BIOS v9.5  (C) 1995 Sonicite Microsystems\n",260);
@@ -5020,10 +5065,12 @@ stack(
       });
     }
     inputEl.addEventListener("keydown",(e)=>{
+      if(!e.disabled && e.key!=="Shift" && e.key!=="Control" && e.key!=="Alt" && e.key!=="Meta") sfxKey(0.12);  // 用户敲键声
       if(e.key==="Enter" && !e.isComposing){
         e.preventDefault();
         const v=inputEl.value.trim(); if(!v) return;
         inputEl.value=""; inputEl.disabled=true;
+        sfxDing();
         printLine("> "+v,"user");
         const r=T.resolveInput; T.resolveInput=null; if(r) r(v);
       }
@@ -5070,6 +5117,7 @@ stack(
       return new Promise(resolve=>{
         $("tm-dlg-msg").innerHTML = "SOUL.EXE has performed an illegal emotion<br>and will be closed.<br><br>The feeling could not be written to disk.";
         setScreen("error");
+        sfxError();   // 经典 Windows 错误音
         let done=false; const finish=()=>{ if(done)return; done=true; clearTimeout(to); resolve(); };
         $("tm-dlg-ok").onclick=finish;
         const to=setTimeout(finish,2800); T.cleanups.push(()=>clearTimeout(to));
@@ -5078,6 +5126,7 @@ stack(
 
     async function showBsod(){
       setScreen("bsod");
+      sfxCrash();   // 系统崩溃音 (下行扫频 + 噪声)
       const pre=$("tm-bsod-text");
       pre.innerHTML =
 "  <span class=\"hl\">VibeOS</span>\n\n"+
@@ -5178,6 +5227,7 @@ stack(
       if(T.running || T.showActive) return;
       // 终端对话/作曲走服务器云 key (/terminal/*), 浏览器无需配自己的 LLM key
       try{ unlockAudioNow(); }catch(_){}
+      try{ ac(); }catch(_){}   // 在用户手势内初始化 SFX 音频上下文
       stopShow();
       T.running=true;
       T.abort=new AbortController();
