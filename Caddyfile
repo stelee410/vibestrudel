@@ -30,6 +30,12 @@
         reverse_proxy app:8080
     }
 
+    # TERMINAL show — 云 key 跑 SOUL.EXE 对话 + 作曲
+    @terminal path_regexp ^/terminal/(chat|compose)$
+    handle @terminal {
+        reverse_proxy app:8080
+    }
+
     # /s/:id/code, /s/:id/text 的所有方法 → 转发
     @session_action path_regexp ^/s/[a-zA-Z0-9_-]+/(code|text)$
     handle @session_action {

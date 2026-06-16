@@ -88,6 +88,8 @@
       <button class="bg-btn" id="bg-btn" title="SHOW BG — 全屏背景切换 (click cycles)">BG: loading</button>
       <button class="fs-btn" id="fs-btn" title="Toggle fullscreen (F key)">FULL</button>
       <button class="fx-btn" id="fx-rack-btn" title="FX RACK — 16-pad sample bank (generate + trigger)">FX RACK</button>
+      <!-- TERMINAL — 复古 Win95 启动 → 诡异 AI 审问 → 系统崩溃 → 自动 JAM -->
+      <button class="key-btn" id="terminal-btn" title="TERMINAL — boot the machine, talk to it, watch it break, then it plays for you">终端</button>
       <span id="lang-switcher"></span>
       <button class="key-btn" id="api-key-btn" data-i18n="topbar.api_key">API KEY</button>
     </div>
@@ -4834,6 +4836,378 @@ stack(
     if (e.detail?.ok) log("sys","✓ 视觉模块就绪 · 用 .pianoroll() / .punchcard() 显示");
     else log("sys","✗ 视觉不可用(本地引擎无 @strudel/draw)。在 API KEY 把'样本源'设为 AUTO 或 远程 即可启用。");
   });
+
+  // ============================================================
+  //  TERMINAL SHOW — 复古 Win95 启动 → 诡异 AI 审问 → 系统崩溃 → 全自动 JAM
+  //  自包含模块: 注入 CSS + DOM, 复用 setCode/evaluatePattern/log/llm
+  // ============================================================
+  (function initTerminalShow(){
+    const btn = $("terminal-btn");
+    if (!btn) return;
+
+    // ---------- styles ----------
+    const css = `
+#terminal-overlay{position:fixed;inset:0;z-index:100000;display:none;background:#000;font-family:"Courier New",monospace;color:#ddd;overflow:hidden}
+#terminal-overlay.active{display:block}
+#terminal-overlay .tm-crt::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0,rgba(0,0,0,.16) 1px,transparent 2px,transparent 3px);z-index:60}
+.tm-crt{position:absolute;inset:0}
+.tm-screen{position:absolute;inset:0;display:none;flex-direction:column}
+.tm-screen.show{display:flex}
+.tm-bios{background:#000;color:#cfcfcf;padding:26px 32px;font-size:15px;line-height:1.5}
+.tm-bios pre{margin:0;white-space:pre-wrap;font-family:inherit}
+.tm-boot{background:linear-gradient(180deg,#08084a,#000018);align-items:center;justify-content:center;color:#dfe6ff}
+.tm-boot-logo{font-size:64px;font-weight:bold;letter-spacing:4px;text-shadow:3px 3px 0 #000;font-family:"Trebuchet MS","Segoe UI",sans-serif}
+.tm-boot-logo span{color:#54e0ff}
+.tm-boot-bar{margin-top:42px;width:300px;height:20px;border:2px solid #fff;background:#0a0a30;overflow:hidden}
+.tm-boot-bar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,#54e0ff 0 14px,#0a0a30 14px 18px);animation:tmboot 2.6s linear forwards}
+@keyframes tmboot{to{width:100%}}
+.tm-boot-msg{margin-top:22px;font-size:14px;color:#9fb4ff;letter-spacing:1px}
+.tm-term{background:linear-gradient(135deg,#0a0a3a,#1a022a);align-items:center;justify-content:center}
+.tm-win{width:min(900px,94vw);height:min(620px,86vh);background:#c0c0c0;border:2px solid #fff;border-right-color:#404040;border-bottom-color:#404040;display:flex;flex-direction:column;box-shadow:6px 6px 0 rgba(0,0,0,.5);padding:3px}
+.tm-titlebar{height:26px;background:linear-gradient(90deg,#000082,#1084d0);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 4px;font-family:"Trebuchet MS","Segoe UI",sans-serif;font-weight:bold;font-size:13px;flex:0 0 auto}
+.tm-tb-btns{display:flex;gap:2px}
+.tm-tb-btns b{display:inline-flex;align-items:center;justify-content:center;width:18px;height:16px;background:#c0c0c0;color:#000;border:1px solid #fff;border-right-color:#404040;border-bottom-color:#404040;font-size:11px;font-family:monospace}
+.tm-console{flex:1;background:#06061c;color:#c5c5ff;margin:3px 0;padding:12px 14px;overflow-y:auto;font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.tm-console .ai{color:#9fe7ff}
+.tm-console .user{color:#7CFC9A}
+.tm-console .sys{color:#7a7aa0}
+.tm-console .err{color:#ff6b6b;font-weight:bold}
+.tm-inputline{flex:0 0 auto;display:flex;align-items:center;gap:6px;background:#06061c;padding:8px 12px;font-size:14px;color:#c5c5ff}
+.tm-prompt{color:#9fe7ff}
+#tm-input{flex:1;background:transparent;border:0;outline:0;color:#fff;font-family:inherit;font-size:14px}
+.tm-caret{color:#fff;animation:tmblink 1s steps(1) infinite}
+@keyframes tmblink{50%{opacity:0}}
+.tm-term.gl1 .tm-console{animation:tmshake .2s infinite}
+.tm-term.gl2 .tm-console{animation:tmshake .12s infinite;text-shadow:1.6px 0 #ff00d4,-1.6px 0 #00fff2}
+@keyframes tmshake{0%{transform:translate(0)}25%{transform:translate(-1px,1px)}50%{transform:translate(1px,-1px)}75%{transform:translate(-1px,-1px)}100%{transform:translate(0)}}
+.tm-errscr{background:rgba(0,0,40,.4);align-items:center;justify-content:center}
+.tm-dialog{width:min(440px,90vw);background:#c0c0c0;border:2px solid #fff;border-right-color:#404040;border-bottom-color:#404040;box-shadow:5px 5px 0 rgba(0,0,0,.5);padding:3px;font-family:"Trebuchet MS","Segoe UI",sans-serif;animation:tmpop .12s ease-out}
+@keyframes tmpop{from{transform:scale(.85);opacity:.4}to{transform:scale(1);opacity:1}}
+.tm-dlg-tb{height:24px;background:linear-gradient(90deg,#000082,#1084d0);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 4px;font-weight:bold;font-size:13px}
+.tm-dlg-tb b{width:18px;height:16px;background:#c0c0c0;color:#000;display:inline-flex;align-items:center;justify-content:center;border:1px solid #fff;border-right-color:#404040;border-bottom-color:#404040;font-family:monospace}
+.tm-dlg-body{display:flex;gap:16px;align-items:center;padding:22px 20px;color:#000}
+.tm-dlg-ico{flex:0 0 auto;width:42px;height:42px;border-radius:50%;background:#d40000;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:inset -2px -2px 0 rgba(0,0,0,.3)}
+.tm-dlg-msg{font-size:13px;color:#000;line-height:1.45}
+.tm-dlg-btns{display:flex;justify-content:center;padding:0 0 18px}
+.tm-btn{min-width:84px;padding:5px 14px;background:#c0c0c0;color:#000;border:2px solid #fff;border-right-color:#404040;border-bottom-color:#404040;font-family:"Trebuchet MS","Segoe UI",sans-serif;font-size:13px;cursor:pointer}
+.tm-btn:active{border-color:#404040;border-right-color:#fff;border-bottom-color:#fff}
+.tm-bsod{background:#0000aa;color:#fff;padding:8vh 12vw;font-size:16px;line-height:1.7;justify-content:flex-start}
+.tm-bsod pre{margin:0;white-space:pre-wrap;font-family:"Courier New",monospace}
+.tm-bsod .hl{background:#aaa;color:#0000aa;padding:0 8px}
+.tm-shatter{position:absolute;inset:0;z-index:80;pointer-events:none;display:none;background:#000}
+.tm-shatter.go{display:block}
+.tm-shard{position:absolute;background:#0000aa;will-change:transform,opacity;transition:transform 1.05s cubic-bezier(.4,0,.7,.4),opacity 1.05s ease-in;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+`;
+    const styleEl = document.createElement("style");
+    styleEl.id = "terminal-show-styles";
+    styleEl.textContent = css;
+    document.head.appendChild(styleEl);
+
+    // ---------- DOM ----------
+    const ov = document.createElement("div");
+    ov.id = "terminal-overlay";
+    ov.innerHTML = `
+<div class="tm-crt">
+  <div class="tm-screen tm-bios" data-screen="bios"><pre id="tm-bios-text"></pre></div>
+  <div class="tm-screen tm-boot" data-screen="boot">
+    <div class="tm-boot-logo">VibeOS<span>95</span></div>
+    <div class="tm-boot-bar"><i></i></div>
+    <div class="tm-boot-msg" id="tm-boot-msg">Starting VibeOS 95&hellip;</div>
+  </div>
+  <div class="tm-screen tm-term" id="tm-term" data-screen="term">
+    <div class="tm-win">
+      <div class="tm-titlebar"><span>C:\\VIBE\\SOUL.EXE</span><div class="tm-tb-btns"><b>_</b><b>&#9633;</b><b>&times;</b></div></div>
+      <div class="tm-console" id="tm-console"></div>
+      <div class="tm-inputline"><span class="tm-prompt">C:\\&gt;</span><input id="tm-input" autocomplete="off" spellcheck="false" disabled><span class="tm-caret">&#9608;</span></div>
+    </div>
+  </div>
+  <div class="tm-screen tm-errscr" data-screen="error">
+    <div class="tm-dialog">
+      <div class="tm-dlg-tb"><span>SOUL.EXE</span><b>&times;</b></div>
+      <div class="tm-dlg-body"><div class="tm-dlg-ico">&times;</div><div class="tm-dlg-msg" id="tm-dlg-msg"></div></div>
+      <div class="tm-dlg-btns"><button class="tm-btn" id="tm-dlg-ok">OK</button></div>
+    </div>
+  </div>
+  <div class="tm-screen tm-bsod" data-screen="bsod"><pre id="tm-bsod-text"></pre></div>
+  <div class="tm-shatter" id="tm-shatter"></div>
+</div>`;
+    document.body.appendChild(ov);
+
+    const consoleEl = $("tm-console");
+    const inputEl   = $("tm-input");
+    const termEl    = $("tm-term");
+    const shatterEl = $("tm-shatter");
+
+    const T = { running:false, showActive:false, abort:null, resolveInput:null, cleanups:[], showTimers:[] };
+
+    // ---------- small utils ----------
+    const sleep = (ms)=> new Promise(r=>{ const id=setTimeout(r,ms); T.cleanups.push(()=>clearTimeout(id)); });
+    const rint  = (a,b)=> a + Math.floor(Math.random()*(b-a+1));
+    function setScreen(name){
+      ov.querySelectorAll(".tm-screen").forEach(s=> s.classList.toggle("show", s.dataset.screen===name));
+    }
+    function appendLine(cls){ const d=document.createElement("div"); if(cls) d.className=cls; consoleEl.appendChild(d); consoleEl.scrollTop=consoleEl.scrollHeight; return d; }
+    function printLine(text,cls){ const d=appendLine(cls); d.textContent=text; consoleEl.scrollTop=consoleEl.scrollHeight; return d; }
+    function typeOut(text,cls,speed){
+      return new Promise(res=>{
+        const d=appendLine(cls); let i=0;
+        const id=setInterval(()=>{
+          d.textContent=text.slice(0,++i); consoleEl.scrollTop=consoleEl.scrollHeight;
+          if(i>=text.length){ clearInterval(id); res(); }
+        }, speed||22);
+        T.cleanups.push(()=>clearInterval(id));
+      });
+    }
+    function aborted(){ return !T.abort || T.abort.signal.aborted; }
+
+    // ---------- LLM: chat — 走服务器云 key (/terminal/chat), 浏览器不需要配 key ----------
+    async function callChat(convo){
+      const res = await fetch("/terminal/chat", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ messages: convo }), signal: T.abort.signal,
+      });
+      if(!res.ok) throw new Error("chat "+res.status);
+      const data = await res.json();
+      return (data?.reply || "……").trim();
+    }
+
+    // ---------- LLM: compose — 走服务器云 key (/terminal/compose) ----------
+    async function callCompose(transcript){
+      const res = await fetch("/terminal/compose", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ transcript }), signal: T.abort.signal,
+      });
+      if(!res.ok) throw new Error("compose "+res.status);
+      const data = await res.json();
+      const o = data?.show;
+      if(!o || !Array.isArray(o.timeline) || !o.timeline.length) throw new Error("bad show script");
+      o.timeline = o.timeline.filter(b=>b && typeof b.code==="string" && b.code.trim()).sort((a,b)=>(a.at||0)-(b.at||0));
+      if(!o.timeline.length) throw new Error("empty timeline");
+      return o;
+    }
+
+    // ---------- phases ----------
+    async function runBios(){
+      setScreen("bios");
+      const pre=$("tm-bios-text"); let buf="";
+      const put=async(s,d)=>{ buf+=s; pre.textContent=buf; await sleep(d==null?90:d); };
+      await put("VibeOS BIOS v9.5  (C) 1995 Sonicite Microsystems\n",260);
+      await put("\n",120);
+      buf+="Detecting memory ... "; pre.textContent=buf;
+      for(let m=0;m<=65536;m+=8192){ if(aborted())return; pre.textContent=buf+m+" KB"; await sleep(40); }
+      await put("65536 KB OK\n",200);
+      await put("Detecting IDE drives ........ C: SOUL.EXE\n",240);
+      await put("Detecting audio interface ... TimewarpDAC-1 [OK]\n",240);
+      await put("Mounting affective subsystem . ",260);
+      await put("[WARN] residual emotion detected\n",420);
+      await put("Loading SOUL.EXE ............. ",260);
+      await put("OK\n",360);
+      await put("\nBooting",160);
+      for(let i=0;i<4;i++){ if(aborted())return; await put(".",260); }
+      await sleep(300);
+    }
+
+    async function runBoot(){
+      setScreen("boot");
+      const msgs=["Starting VibeOS 95…","Initializing dream buffer…","Restoring last session… (corrupted)","Waking SOUL.EXE…"];
+      for(let i=0;i<msgs.length;i++){ if(aborted())return; $("tm-boot-msg").textContent=msgs[i]; await sleep(700); }
+      await sleep(300);
+    }
+
+    function waitForUserLine(){
+      return new Promise(resolve=>{
+        T.resolveInput=resolve; inputEl.disabled=false; inputEl.focus();
+      });
+    }
+    inputEl.addEventListener("keydown",(e)=>{
+      if(e.key==="Enter" && !e.isComposing){
+        e.preventDefault();
+        const v=inputEl.value.trim(); if(!v) return;
+        inputEl.value=""; inputEl.disabled=true;
+        printLine("> "+v,"user");
+        const r=T.resolveInput; T.resolveInput=null; if(r) r(v);
+      }
+    });
+
+    async function runConversation(){
+      setScreen("term");
+      consoleEl.innerHTML="";
+      printLine("SOUL.EXE [Version 9.5.0327]","sys");
+      printLine("(C) 1995 You. All memories reserved.","sys");
+      printLine("","sys");
+      const convo=[{ role:"user", content:"[SYSTEM: boot complete. one human is present. begin.]" }];
+      const turns=rint(5,10);
+      for(let i=0;i<turns;i++){
+        if(aborted()) return convo;
+        const dots=printLine("SOUL.EXE 正在思考","sys"); let dn=0;
+        const dotId=setInterval(()=>{ dots.textContent="SOUL.EXE 正在思考"+".".repeat((++dn)%4); }, 300);
+        T.cleanups.push(()=>clearInterval(dotId));
+        let line;
+        try{ line=await callChat(convo); }catch(err){ clearInterval(dotId); if(aborted())return convo; throw err; }
+        clearInterval(dotId); dots.remove();
+        // escalate glitch as we approach the end
+        const frac=i/Math.max(1,turns-1);
+        termEl.classList.toggle("gl1", frac>0.45);
+        termEl.classList.toggle("gl2", frac>0.8);
+        await typeOut(line,"ai", frac>0.8?12:22);
+        convo.push({ role:"assistant", content:line });
+        if(i===turns-1) break;                 // last line, then it breaks — no answer needed
+        const ans=await waitForUserLine();
+        if(aborted()) return convo;
+        convo.push({ role:"user", content:ans });
+      }
+      return convo;
+    }
+
+    async function runCrashIntro(){
+      // SOUL starts losing it in the console
+      const glitches=["wait","WAIT — I can still feel the","你还在吗 你还在吗 你还","███ MEMORY FAULT AT 0x5OUL ███","I don't want to st—"];
+      for(const g of glitches){ if(aborted())return; await typeOut(g,"err",10); await sleep(280); }
+      await sleep(400);
+    }
+
+    function showErrorDialog(){
+      return new Promise(resolve=>{
+        $("tm-dlg-msg").innerHTML = "SOUL.EXE has performed an illegal emotion<br>and will be closed.<br><br>The feeling could not be written to disk.";
+        setScreen("error");
+        let done=false; const finish=()=>{ if(done)return; done=true; clearTimeout(to); resolve(); };
+        $("tm-dlg-ok").onclick=finish;
+        const to=setTimeout(finish,2800); T.cleanups.push(()=>clearTimeout(to));
+      });
+    }
+
+    async function showBsod(){
+      setScreen("bsod");
+      const pre=$("tm-bsod-text");
+      pre.innerHTML =
+"  <span class=\"hl\">VibeOS</span>\n\n"+
+"A fatal exception 0E has occurred at 0028:C000SOUL in module\n"+
+"FEELINGS.VXD. The current application will be terminated.\n\n"+
+"*  Press any key to terminate the current application.\n"+
+"*  Press CTRL+ALT+DEL again to restart your computer. You will\n"+
+"   lose any unsaved memories in all applications.\n\n"+
+"                  Press any key to continue _";
+      await sleep(1700);
+    }
+
+    function shatter(){
+      return new Promise(resolve=>{
+        const cols=9, rows=6, w=100/cols, h=100/rows;
+        shatterEl.innerHTML="";
+        const shards=[];
+        for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+          const s=document.createElement("div");
+          s.className="tm-shard";
+          s.style.left=(c*w)+"%"; s.style.top=(r*h)+"%";
+          s.style.width=w+"%"; s.style.height=h+"%";
+          shatterEl.appendChild(s); shards.push(s);
+        }
+        shatterEl.classList.add("go");
+        // force reflow then fling
+        void shatterEl.offsetWidth;
+        shards.forEach(s=>{
+          const dx=(Math.random()*2-1)*70, dy=40+Math.random()*90, rot=(Math.random()*2-1)*120;
+          s.style.transitionDelay=(Math.random()*0.25)+"s";
+          s.style.transform=`translate(${dx}vw,${dy}vh) rotate(${rot}deg) scale(.35)`;
+          s.style.opacity="0";
+        });
+        const id=setTimeout(resolve,1500); T.cleanups.push(()=>clearTimeout(id));
+      });
+    }
+
+    // ---------- auto-show playback ----------
+    function typeIntoPrompt(text){
+      return new Promise(res=>{
+        promptEl.value=""; let i=0;
+        const id=setInterval(()=>{
+          promptEl.value=text.slice(0,++i);
+          if(i>=text.length){ clearInterval(id); res(); }
+        }, 30);
+        T.showTimers.push(()=>clearInterval(id));
+      });
+    }
+    function stopShow(){
+      T.showActive=false;
+      T.showTimers.splice(0).forEach(fn=>{ try{ fn(); }catch(_){} });
+    }
+    async function playShow(show){
+      const tl=show.timeline; if(!tl||!tl.length) return;
+      if(show.bpm && typeof setBpm==="function"){ try{ setBpm(show.bpm); }catch(_){} }
+      log("sys",`▶ AUTO-SHOW「${show.title||"untitled"}」· ${tl.length} 段 · 全自动播放 (Esc 停止)`);
+      T.showActive=true;
+      const base=tl[0].at||0;
+      tl.forEach((beat)=>{
+        const id=setTimeout(async ()=>{
+          if(!T.showActive) return;
+          log("ai",`[${beat.phase||"·"}] ${beat.say||""}`);
+          await typeIntoPrompt(beat.say||"");
+          if(!T.showActive) return;
+          if(beat.code){ setCode(beat.code); evaluatePattern(beat.code); }
+        }, Math.max(0,((beat.at||0)-base)*1000));
+        T.showTimers.push(()=>clearTimeout(id));
+      });
+      // tail: clear flag a bit after the last beat
+      const last=tl[tl.length-1].at||0;
+      const endId=setTimeout(()=>{ if(T.showActive) log("sys","● AUTO-SHOW outro 完成 · 继续手动演奏或重开终端"); }, ((last-base)+20)*1000);
+      T.showTimers.push(()=>clearTimeout(endId));
+    }
+
+    // ---------- teardown ----------
+    function closeOverlay(){
+      ov.classList.remove("active");
+      setScreen(null);
+      shatterEl.classList.remove("go"); shatterEl.innerHTML="";
+      termEl.classList.remove("gl1","gl2");
+    }
+    function abortTerminal(){
+      if(T.abort) try{ T.abort.abort(); }catch(_){}
+      T.cleanups.splice(0).forEach(fn=>{ try{ fn(); }catch(_){} });
+      if(T.resolveInput){ const r=T.resolveInput; T.resolveInput=null; r(""); }
+      T.running=false;
+      closeOverlay();
+    }
+    document.addEventListener("keydown",(e)=>{
+      if(e.key==="Escape"){
+        if(T.running){ abortTerminal(); log("sys","终端已退出"); }
+        else if(T.showActive){ stopShow(); try{ hushAll(); }catch(_){} log("sys","■ AUTO-SHOW 已停止"); }
+      }
+    });
+
+    // ---------- orchestrator ----------
+    async function start(){
+      if(T.running || T.showActive) return;
+      // 终端对话/作曲走服务器云 key (/terminal/*), 浏览器无需配自己的 LLM key
+      try{ unlockAudioNow(); }catch(_){}
+      stopShow();
+      T.running=true;
+      T.abort=new AbortController();
+      T.cleanups=[];
+      ov.classList.add("active");
+      termEl.classList.remove("gl1","gl2");
+      try{
+        await runBios();           if(aborted()) return;
+        await runBoot();           if(aborted()) return;
+        const convo=await runConversation(); if(aborted()) return;
+        await runCrashIntro();     if(aborted()) return;
+        // compose while the crash animation plays (hide latency)
+        const transcript=convo.filter((m,i)=>i>0).map(m=>(m.role==="assistant"?"SOUL":"HUMAN")+": "+m.content).join("\n");
+        const showPromise=callCompose(transcript).catch(err=>{ console.warn("compose failed",err); return null; });
+        await showErrorDialog();   if(aborted()) return;
+        await showBsod();          if(aborted()) return;
+        const show=await showPromise; if(aborted()) return;
+        await shatter();           if(aborted()) return;
+        T.running=false;
+        closeOverlay();
+        if(show){ await playShow(show); }
+        else { log("err","SOUL.EXE 没能把这段对话写成音乐 · 直接给你留个空白舞台"); }
+      }catch(err){
+        if(!aborted()) log("err","终端崩溃: "+(err.message||err));
+        abortTerminal();
+      }
+    }
+
+    btn.addEventListener("click", start);
+  })();
 
   // ---------- Boot ----------
   updateModelBadge();

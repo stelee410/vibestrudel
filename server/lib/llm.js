@@ -118,6 +118,36 @@ export async function callGemini({ apiKey, systemPrompt, userText, history = [],
   };
 }
 
+// 通用网关调用 — 不绑定 {code,explanation} schema, 给 TERMINAL 聊天/作曲这类自由格式用.
+// messages: 完整 OpenAI messages (含 system). responseFormat: 传则走 structured output, 不传则纯文本.
+// 复用同一个云 key / BASE_URL / MODEL. 返回 { text, tokensIn, tokensOut }.
+export async function callGatewayRaw({ messages, temperature = 0.9, maxTokens = MAX_TOKENS, responseFormat = null, timeoutMs = 30_000 }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing LLM API key (set GEMINI_API_KEY)");
+  const body = { model: MODEL, messages, temperature, max_tokens: maxTokens };
+  if (responseFormat) body.response_format = responseFormat;
+
+  const res = await fetch(`${BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`LLM ${res.status}: ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const choice = data?.choices?.[0];
+  const finish = choice?.finish_reason;
+  const text = choice?.message?.content || "";
+  if (finish === "length" || finish === "content_filter") {
+    throw new Error(`LLM truncated (finish=${finish}); raise max_tokens or shorten input`);
+  }
+  const usage = data?.usage || {};
+  return { text, tokensIn: usage.prompt_tokens || 0, tokensOut: usage.completion_tokens || 0 };
+}
+
 // 剥掉字符串前后的 markdown code fence (```js / ```javascript / ```), 防止 Strudel 拿到带 fence 的代码崩
 function stripCodeFence(s) {
   if (typeof s !== "string") return "";
@@ -160,7 +190,7 @@ function safeJsonParse(s) {
 
 // 模型可能输出: 裸 JSON / ```json ...``` block / ``` ...``` block / 前后带闲聊文字的 JSON
 // 用括号匹配找第一个完整的 {...}, 再 JSON.parse. 代码里的 } 不会干扰因为我们计数 {/}.
-function tryParseLLMJson(text) {
+export function tryParseLLMJson(text) {
   if (!text) return null;
   // 1) 直接 parse (最常见)
   let r = safeJsonParse(text);
