@@ -8,6 +8,7 @@ import metaRoutes from "./routes/meta.js";
 import optimizeRoutes from "./routes/optimize.js";
 import fxRoutes from "./routes/fx.js";
 import fxBankRoutes from "./routes/fx_bank.js";
+import terminalRoutes from "./routes/terminal.js";
 
 import { loadValidNames } from "./lib/samples.js";
 import { redis } from "./lib/redis.js";
@@ -39,6 +40,7 @@ await fastify.register(metaRoutes);
 await fastify.register(optimizeRoutes);
 await fastify.register(fxRoutes);
 await fastify.register(fxBankRoutes);
+await fastify.register(terminalRoutes);
 
 // 优雅退出
 process.on("SIGINT", () => shutdown());
