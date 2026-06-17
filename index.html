@@ -4894,9 +4894,21 @@ stack(
 .tm-bsod{background:#0000aa;color:#fff;padding:8vh 12vw;font-size:16px;line-height:1.7;justify-content:flex-start}
 .tm-bsod pre{margin:0;white-space:pre-wrap;font-family:"Courier New",monospace}
 .tm-bsod .hl{background:#aaa;color:#0000aa;padding:0 8px}
+.tm-bsod-restart{margin-top:6vh;font-family:"Courier New",monospace;font-size:16px}
+.tm-bsod-rlabel{margin-bottom:10px;letter-spacing:1px}
+.tm-bsod-bar{width:min(560px,70vw);height:22px;border:2px solid #fff;padding:2px;background:#0000aa}
+.tm-bsod-bar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,#fff 0 12px,#0000aa 12px 16px);transition:width .2s linear}
+.tm-bsod-cont{margin-top:22px;display:none;animation:tmblink 1s steps(1) infinite}
 .tm-shatter{position:absolute;inset:0;z-index:80;pointer-events:none;display:none;background:#000}
 .tm-shatter.go{display:block}
 .tm-shard{position:absolute;background:#0000aa;will-change:transform,opacity;transition:transform 1.05s cubic-bezier(.4,0,.7,.4),opacity 1.05s ease-in;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+/* 梦核打字机弹幕 — auto-show 时浮在大屏上 (主要给 SHOW 模式, 那里输入框隐藏) */
+#tm-danmaku{position:fixed;inset:0;z-index:55;pointer-events:none;display:none;overflow:hidden}
+body.mode-show #tm-danmaku, html.mode-show #tm-danmaku{display:block}
+.tm-dm{position:absolute;left:6vw;right:6vw;text-align:center;font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Trebuchet MS",sans-serif;font-size:clamp(22px,3.4vw,54px);font-weight:600;line-height:1.35;letter-spacing:1px;white-space:pre-wrap;color:#ece8ff;text-shadow:0 0 22px rgba(150,125,255,.65),0 2px 10px rgba(0,0,0,.75);opacity:0;transition:opacity .6s ease}
+.tm-dm.in{opacity:1}
+.tm-dm.out{opacity:0;transform:translateY(-46px);transition:opacity 2.6s ease,transform 2.6s ease}
+.tm-dm .cur{opacity:.7;animation:tmblink 1s steps(1) infinite}
 `;
     const styleEl = document.createElement("style");
     styleEl.id = "terminal-show-styles";
@@ -4928,10 +4940,22 @@ stack(
       <div class="tm-dlg-btns"><button class="tm-btn" id="tm-dlg-ok">OK</button></div>
     </div>
   </div>
-  <div class="tm-screen tm-bsod" data-screen="bsod"><pre id="tm-bsod-text"></pre></div>
+  <div class="tm-screen tm-bsod" data-screen="bsod">
+    <pre id="tm-bsod-text"></pre>
+    <div class="tm-bsod-restart" id="tm-bsod-restart">
+      <div class="tm-bsod-rlabel">正在重启系统 · Restarting <span id="tm-bsod-pct">0%</span></div>
+      <div class="tm-bsod-bar"><i id="tm-bsod-fill"></i></div>
+      <div class="tm-bsod-cont" id="tm-bsod-cont">按任意键继续 — Press any key to continue _</div>
+    </div>
+  </div>
   <div class="tm-shatter" id="tm-shatter"></div>
 </div>`;
     document.body.appendChild(ov);
+
+    // 梦核弹幕层 — 独立于 overlay (overlay 结束后还要在大屏上显示)
+    const danmakuEl = document.createElement("div");
+    danmakuEl.id = "tm-danmaku";
+    document.body.appendChild(danmakuEl);
 
     const consoleEl = $("tm-console");
     const inputEl   = $("tm-input");
@@ -4997,7 +5021,9 @@ stack(
     async function callCompose(transcript){
       const res = await fetch("/terminal/compose", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ transcript }), signal: T.abort.signal,
+        // 在 party 房间里跑时带上 sessionId, 让作曲尊重房间锁的 BPM/STYLE/自定义规则
+        body: JSON.stringify({ transcript, sessionId: (PARTY_MODE && SESSION_ID) ? SESSION_ID : undefined }),
+        signal: T.abort.signal,
       });
       if(!res.ok) throw new Error("compose "+res.status);
       const data = await res.json();
@@ -5124,19 +5150,39 @@ stack(
       });
     }
 
-    async function showBsod(){
+    // 蓝屏 + "正在重启" 进度条. 进度条爬到 90% 后挂住等 AI 作曲完成 (showPromise),
+    // 完成才冲到 100% → 显示 "按任意键继续" → 等用户按键/点击. 返回作曲结果 (可能 null).
+    async function showBsodRestart(showPromise){
       setScreen("bsod");
       sfxCrash();   // 系统崩溃音 (下行扫频 + 噪声)
-      const pre=$("tm-bsod-text");
-      pre.innerHTML =
+      $("tm-bsod-text").innerHTML =
 "  <span class=\"hl\">VibeOS</span>\n\n"+
 "A fatal exception 0E has occurred at 0028:C000SOUL in module\n"+
-"FEELINGS.VXD. The current application will be terminated.\n\n"+
-"*  Press any key to terminate the current application.\n"+
-"*  Press CTRL+ALT+DEL again to restart your computer. You will\n"+
-"   lose any unsaved memories in all applications.\n\n"+
-"                  Press any key to continue _";
-      await sleep(1700);
+"FEELINGS.VXD. The system is rebuilding the dream from\n"+
+"what remains of this conversation.\n";
+      const fill=$("tm-bsod-fill"), pctEl=$("tm-bsod-pct"), cont=$("tm-bsod-cont");
+      cont.style.display="none";
+      let p=0; const setP=(v)=>{ p=Math.max(p,v); fill.style.width=p+"%"; pctEl.textContent=Math.round(p)+"%"; };
+      setP(0);
+      // 爬升到 90% (随机步进, 像真在重启)
+      const creep=setInterval(()=>{ if(p<90) setP(Math.min(90,p+2+Math.random()*7)); }, 360);
+      T.cleanups.push(()=>clearInterval(creep));
+      let show=null;
+      try{ show=await showPromise; }catch(_){ show=null; }
+      clearInterval(creep);
+      if(aborted()) return show;
+      // 冲到 100%
+      await new Promise(r=>{ const f=setInterval(()=>{ setP(Math.min(100,p+5)); if(p>=100){ clearInterval(f); r(); } }, 28); T.cleanups.push(()=>clearInterval(f)); });
+      sfxBeep();
+      cont.style.display="block";   // "按任意键继续" 开始闪
+      // 等任意键 / 点击 (Esc 留给全局 abort, 这里忽略)
+      await new Promise(resolve=>{
+        const go=(e)=>{ if(e && e.type==="keydown" && e.key==="Escape") return; cleanup(); resolve(); };
+        const cleanup=()=>{ window.removeEventListener("keydown",go,true); ov.removeEventListener("click",go,true); };
+        window.addEventListener("keydown",go,true); ov.addEventListener("click",go,true);
+        T.cleanups.push(cleanup);
+      });
+      return show;
     }
 
     function shatter(){
@@ -5178,20 +5224,88 @@ stack(
     function stopShow(){
       T.showActive=false;
       T.showTimers.splice(0).forEach(fn=>{ try{ fn(); }catch(_){} });
+      try{ window.__vibeStopHydra && window.__vibeStopHydra(); }catch(_){}
+      danmakuEl.innerHTML="";   // 清掉残留弹幕
     }
+
+    // 梦核打字机弹幕 — 把 say 文字以打字机效果浮现, 停留后上飘淡出. (SHOW 模式靠 CSS 显示)
+    let __dmY=18;
+    function danmaku(text){
+      if(!text) return;
+      const el=document.createElement("div");
+      el.className="tm-dm";
+      __dmY = 14 + ((__dmY+27)%56);          // 错落分布, 避免每条都同一高度
+      el.style.top=__dmY+"vh";
+      const span=document.createElement("span");
+      const cur=document.createElement("span"); cur.className="cur"; cur.textContent="▌";
+      el.appendChild(span); el.appendChild(cur);
+      danmakuEl.appendChild(el);
+      requestAnimationFrame(()=>el.classList.add("in"));
+      let i=0;
+      const id=setInterval(()=>{
+        span.textContent=text.slice(0,++i);
+        if(i>=text.length){
+          clearInterval(id); cur.remove();
+          const hold=setTimeout(()=>{
+            el.classList.add("out");
+            const rm=setTimeout(()=>el.remove(), 2700);
+            T.showTimers.push(()=>{ clearTimeout(rm); el.remove(); });
+          }, 5200);
+          T.showTimers.push(()=>clearTimeout(hold));
+        }
+      }, 70);
+      T.showTimers.push(()=>{ clearInterval(id); });
+    }
+
+    // ---------- 梦核 Hydra 预设 (音频驱动, 按 phase 切换) — 不依赖 LLM 生成 hydra ----------
+    const HYDRA_PRESETS = {
+      // 朦胧氛围 — intro / emergence / breakdown
+      haze: `osc(9,0.02,0.8).color(0.78,0.6,1.0).rotate(0.2,()=>0.01+(window.__audioLow||0)*0.14)
+        .modulate(noise(2.4,0.07),0.25).diff(osc(4,0,1.2).rotate(1.1)).saturate(0.7).brightness(-0.05).out()`,
+      // 流动织体 — build / theme / develop / variation
+      flow: `noise(3,0.1).color(0.6,0.72,1.0).modulateScale(osc(3,0,1),0.4)
+        .kaleid(()=>3+Math.floor((window.__audioMid||0)*6)).rotate(0,()=>0.04+(window.__audioLow||0)*0.2)
+        .colorama(0.05).saturate(0.85).out()`,
+      // 高潮 — peak / drop / climax
+      bloom: `voronoi(()=>6+(window.__audioMid||0)*20,0.25,()=>0.2+(window.__audioHi||0)*2).color(0.9,0.7,1.0)
+        .modulateRotate(osc(2),()=>0.3+(window.__audioLow||0)*1.4).scale(()=>1+(window.__audioLow||0)*0.4)
+        .kaleid(4).colorama(()=>0.05+(window.__audioHi||0)*0.2).saturate(1.1).out()`,
+      // 消散 — outro
+      dissolve: `osc(6,0,0.5).color(0.52,0.46,0.82).rotate(0,0.02).modulate(noise(1.5,0.03),0.3)
+        .luma(0.18,0.35).brightness(-0.14).saturate(0.6).out()`,
+    };
+    function presetFor(phase){
+      const p=String(phase||"").toLowerCase();
+      if(p.includes("peak")||p.includes("drop")||p.includes("climax")) return "bloom";
+      if(p.includes("outro")) return "dissolve";
+      if(p.includes("intro")||p.includes("emerg")||p.includes("break")) return "haze";
+      return "flow"; // build / theme / develop / variation
+    }
+    let __showHydraKey=null;
+    function showHydra(phase){
+      try{ window.setupHydraOnce && window.setupHydraOnce(); }catch(_){}
+      const key=presetFor(phase);
+      if(key===__showHydraKey) return;       // 同一类预设不重复切, 让动画连续
+      __showHydraKey=key;
+      try{ window.__vibeRunHydra && window.__vibeRunHydra(HYDRA_PRESETS[key]); }catch(_){}
+    }
+
     async function playShow(show){
       const tl=show.timeline; if(!tl||!tl.length) return;
       if(show.bpm && typeof setBpm==="function"){ try{ setBpm(show.bpm); }catch(_){} }
-      log("sys",`▶ AUTO-SHOW「${show.title||"untitled"}」· ${tl.length} 段 · 全自动播放 (Esc 停止)`);
+      log("sys",`▶ AUTO-SHOW「${show.title||"untitled"}」· ${tl.length} 段 · 全自动播放 + Hydra 视觉 (Esc 停止)`);
       T.showActive=true;
+      __showHydraKey=null;
       const base=tl[0].at||0;
       tl.forEach((beat)=>{
         const id=setTimeout(async ()=>{
           if(!T.showActive) return;
           log("ai",`[${beat.phase||"·"}] ${beat.say||""}`);
+          danmaku(beat.say||"");          // 梦核文字打字机弹幕 (SHOW 模式可见)
           await typeIntoPrompt(beat.say||"");
           if(!T.showActive) return;
           if(beat.code){ setCode(beat.code); evaluatePattern(beat.code); }
+          showHydra(beat.phase);   // 按段切换梦核视觉
         }, Math.max(0,((beat.at||0)-base)*1000));
         T.showTimers.push(()=>clearTimeout(id));
       });
@@ -5243,8 +5357,8 @@ stack(
         const transcript=convo.filter((m,i)=>i>0).map(m=>(m.role==="assistant"?"SOUL":"HUMAN")+": "+m.content).join("\n");
         const showPromise=callCompose(transcript).catch(err=>{ console.warn("compose failed",err); return null; });
         await showErrorDialog();   if(aborted()) return;
-        await showBsod();          if(aborted()) return;
-        const show=await showPromise; if(aborted()) return;
+        // 蓝屏进度条等作曲完成 → 100% → 按任意键继续
+        const show=await showBsodRestart(showPromise); if(aborted()) return;
         await shatter();           if(aborted()) return;
         T.running=false;
         closeOverlay();

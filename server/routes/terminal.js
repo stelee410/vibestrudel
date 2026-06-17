@@ -2,7 +2,7 @@
 //   POST /terminal/chat     — SOUL.EXE 诡异审问者, 返回纯文本对话
 //   POST /terminal/compose  — 把整段对话编成全自动播放的 strudel show script (JSON)
 // 不绑定 session, 预算 cap 是唯一滥用兜底 (跟 /s/:id/text 同策略).
-import { getMonthCost, addCost } from "../lib/redis.js";
+import { getMonthCost, addCost, getSession } from "../lib/redis.js";
 import { callGatewayRaw, estimateCost, tryParseLLMJson } from "../lib/llm.js";
 
 const BUDGET_CAP = parseFloat(process.env.MONTHLY_CAP_USD || "30");
@@ -91,6 +91,30 @@ export default async function terminalRoutes(fastify) {
     const transcript = typeof req.body?.transcript === "string" ? req.body.transcript.slice(0, 8000) : "";
     if (!transcript.trim()) return reply.code(400).send({ error: "empty_transcript" });
 
+    // 房间初始设置约定 — 终端在 party 房间里跑时, 生成的曲子也要尊重创建房间时锁的 BPM/STYLE/自定义规则
+    let roomAgreement = "";
+    const sid = req.body?.sessionId;
+    if (typeof sid === "string" && /^[a-zA-Z0-9_-]{6,20}$/.test(sid)) {
+      const sess = await getSession(sid).catch(() => null);
+      if (sess) {
+        const lines = [];
+        if (sess.bpmLock) {
+          lines.push(`- BPM is LOCKED at ${sess.bpmLock}: every section MUST use setcpm(${sess.bpmLock}/4). This OVERRIDES the 60-92 dreamcore default range.`);
+        }
+        if (sess.styleHint) {
+          lines.push(`- STYLE: "${sess.styleHint}" — anchor the whole piece in this aesthetic (blend it with the dreamcore feel).`);
+        }
+        if (sess.customHint) {
+          lines.push(`- CUSTOM RULES (set by the room creator): ${sess.customHint}\n  Treat as a strict creative brief — respect in every section.`);
+        }
+        if (lines.length) {
+          roomAgreement =
+            "\n\n== ROOM AGREEMENT — this session's locked settings, they take priority over the dreamcore defaults ==\n" +
+            lines.join("\n");
+        }
+      }
+    }
+
     const user =
       "CONVERSATION TRANSCRIPT (SOUL = the machine, HUMAN = the person):\n\n" +
       transcript +
@@ -99,7 +123,7 @@ export default async function terminalRoutes(fastify) {
     try {
       const { text, tokensIn, tokensOut } = await callGatewayRaw({
         messages: [
-          { role: "system", content: COMPOSE_SYS },
+          { role: "system", content: COMPOSE_SYS + roomAgreement },
           { role: "user", content: user },
         ],
         temperature: 0.9,
